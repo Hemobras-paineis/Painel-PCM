@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Indicadores - OSMC Hemobrás</title>
+    <link rel="icon" type="image/png" href="MARCA_HEMOBRÁS_vertical_(1).png">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="top-header">
+            <div class="branding">
+                <img src="MARCA_HEMOBRÁS_vertical_(1).png" alt="Logo Hemobrás" class="logo">
+                <div class="titles">
+                    <h1>Indicadores OSMC</h1>
+                    <p>Ordens de Serviço de Manutenção Corretiva</p>
+                </div>
+            </div>
+            <div class="actions">
+                <input type="text" id="filterEquipamentoSala" class="filter-select filter-search" placeholder="Pesquisar OS, Equipamento ou Sala...">
+                <div class="multi-select" id="filterStatusWrapper">
+                    <button type="button" class="filter-select multi-select-btn" id="filterStatusBtn">Todos os Status</button>
+                    <div class="multi-select-panel" id="filterStatusPanel" hidden></div>
+                </div>
+                <div class="multi-select" id="filterEmpresaResponsavelWrapper">
+                    <button type="button" class="filter-select multi-select-btn" id="filterEmpresaResponsavelBtn">Todas as Empresas Responsáveis</button>
+                    <div class="multi-select-panel" id="filterEmpresaResponsavelPanel" hidden></div>
+                </div>
+                <select id="filterAnoEmissao" class="filter-select">
+                    <option value="">Todos os Anos de Emissão</option>
+                </select>
+                <div class="multi-select" id="filterMesEmissaoWrapper">
+                    <button type="button" class="filter-select multi-select-btn" id="filterMesEmissaoBtn">Todos os Meses de Emissão</button>
+                    <div class="multi-select-panel" id="filterMesEmissaoPanel" hidden></div>
+                </div>
+                <select id="filterPlanta" class="filter-select">
+                    <option value="">Todas as Plantas</option>
+                </select>
+                <select id="filterBloco" class="filter-select">
+                    <option value="">Todos os Blocos</option>
+                </select>
+
+                <button id="btnRefresh" class="btn-refresh">Atualizar Dados</button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="loading-state" id="loadingState">
+                <p>Sincronizando dados...</p>
+            </div>
+
+            <div class="dashboard-summary" id="dashboardSummary" style="display: none;">
+                <div class="kpi-cards" id="kpiCardsContainer"></div>
+            </div>
+
+            <div class="charts-grid" id="chartsGrid" style="display: none;">
+                <div class="chart-box">
+                    <h4>Total, Resolvidas e Pendentes por Mês</h4>
+                    <div class="canvas-container"><canvas id="osmcChart"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h4 id="blocoChartTitle">Top 5 Blocos (Total de OSMC)</h4>
+                    <div class="canvas-container"><canvas id="blocoChart"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h4>Execução Média por Planta (%)</h4>
+                    <div class="canvas-container"><canvas id="plantaChart"></canvas></div>
+                </div>
+            </div>
+
+            <div class="report-container">
+                <label for="reportType">Relatório:</label>
+                <select id="reportType" class="report-type-select">
+                    <option value="completo">Completo</option>
+                    <option value="pendencias">Somente pendências</option>
+                </select>
+
+                <label for="reportEquipamento">Equipamento:</label>
+                <select id="reportEquipamento" class="report-type-select report-equipamento-select">
+                    <option value="">Todos os Equipamentos</option>
+                </select>
+
+                <button id="btnPdfReport" class="btn-pdf-report">Gerar Relatório PDF</button>
+            </div>
+
+            <div class="table-toggle-container" id="tableToggleContainer" style="display: none;">
+                <button id="btnToggleTable" class="btn-toggle-table">Visualizar Lista de O.S. (Detalhamento)</button>
+            </div>
+
+            <div id="tableSection" style="display: none;">
+                <div class="table-wrapper" id="tableWrapper">
+                    <table id="dataTable">
+                        <thead id="tableHead"></thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="pagination-container" id="paginationContainer">
+                    <span id="pageInfo" class="page-info">Mostrando 0 resultados</span>
+                    <div class="pagination-controls">
+                        <button id="btnPrev" class="btn-page" disabled>Anterior</button>
+                        <span id="currentPageIndicator" class="current-page">1</span>
+                        <button id="btnNext" class="btn-page" disabled>Próximo</button>
+                        
+                        <div class="page-jump">
+                            <input type="number" id="jumpInput" min="1" placeholder="Pág...">
+                            <button id="btnJump" class="btn-jump">Ir</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
