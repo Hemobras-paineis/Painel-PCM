@@ -24,7 +24,7 @@ const filterBloco = document.getElementById('filterBloco');
 const btnRefresh = document.getElementById('btnRefresh');
 const btnPdfReport = document.getElementById('btnPdfReport');
 const reportType = document.getElementById('reportType');
-const reportEquipamento = document.getElementById('reportEquipamento');
+const reportTag = document.getElementById('reportTag');
 
 const loadingState = document.getElementById('loadingState');
 const dashboardSummary = document.getElementById('dashboardSummary'); 
@@ -349,7 +349,7 @@ function popularFiltrosDinamicos() {
     const anosEmissao = new Set();
     const plantaSet = new Set(); 
     const blocoSet = new Set();
-    const equipamentoSet = new Set();
+    const tagSet = new Set();
 
     allData.forEach(row => {
         let cleanStatus = row[0] !== "-" ? row[0].replace(/⚠️|✅|⏸️|❌|⚙️|🛑/g, '').trim() : "-";
@@ -363,7 +363,9 @@ function popularFiltrosDinamicos() {
         }
         if (row[4] !== "-") blocoSet.add(row[4]);
         if (row[12] && row[12] !== "-") plantaSet.add(row[12]);
-        if (row[6] && row[6] !== "-" && row[6].toLowerCase() !== "n/a") equipamentoSet.add(row[6]);
+        if (row.tag && row.tag !== "-" && !['n/a', '#error!'].includes(row.tag.toLowerCase())) {
+            tagSet.add(row.tag);
+        }
     });
 
     function preencherSelect(selectElement, valoresSet, ordenar = true) {
@@ -392,7 +394,7 @@ function popularFiltrosDinamicos() {
         .map(mes => ({ value: mes.chave, label: formatarMesEmissao(mes) })));
     preencherSelect(filterPlanta, plantaSet); 
     preencherSelect(filterBloco, blocoSet);
-    preencherSelect(reportEquipamento, equipamentoSet);
+    preencherSelect(reportTag, tagSet);
 }
 
 function aplicarFiltrosGerais() {
@@ -709,15 +711,15 @@ function gerarRelatorioPdfMensal() {
     }
 
     const somentePendencias = reportType.value === 'pendencias';
-    const equipSelecionado = (reportEquipamento.value || '').trim();
+    const tagSelecionada = (reportTag.value || '').trim();
 
-    // Filtra pelo tipo de relatório e pelo equipamento selecionado
+    // Filtra pelo tipo de relatório e pela TAG selecionada
     let registrosRelatorio = filteredData.filter(row => {
         const status = row[0] ? row[0].toString().replace(/⚠️|✅|⏸️|❌|⚙️|🛑/g, '').trim() : '';
         const passouStatus = !somentePendencias || !isStatusResolvido(status);
-        const equipRow = row[6] ? row[6].toString().trim() : '';
-        const passouEquip = !equipSelecionado || equipRow.toLowerCase() === equipSelecionado.toLowerCase();
-        return passouStatus && passouEquip;
+        const tagRow = row.tag ? row.tag.toString().trim() : '';
+        const passouTag = !tagSelecionada || tagRow.toLowerCase() === tagSelecionada.toLowerCase();
+        return passouStatus && passouTag;
     });
 
     const meses = getStatusPorMes(registrosRelatorio);
@@ -747,8 +749,8 @@ function gerarRelatorioPdfMensal() {
         ? 'Relatório de Pendências de Manutenção Corretiva'
         : 'Relatório Completo de Manutenção Corretiva';
     
-    if (equipSelecionado) {
-        tituloRelatorio += ` - Equipamento: ${equipSelecionado}`;
+    if (tagSelecionada) {
+        tituloRelatorio += ` - TAG: ${tagSelecionada}`;
     }
 
     function desenharCabecalho(titulo, subtitulo) {
@@ -772,7 +774,7 @@ function gerarRelatorioPdfMensal() {
         pdf.setFontSize(8.5);
         pdf.setTextColor(80);
         pdf.text(subtitulo, 24, 43);
-        pdf.text(`Empresa responsável: ${empresaResponsavel} | Equipamento: ${equipSelecionado || 'Todos'}`, 24, 48);
+        pdf.text(`Empresa responsável: ${empresaResponsavel} | TAG: ${tagSelecionada || 'Todas'}`, 24, 48);
         pdf.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')}`, larguraPagina - 16, 28, { align: 'right' });
         pdf.setTextColor(0);
     }
@@ -783,12 +785,18 @@ function gerarRelatorioPdfMensal() {
             { titulo: 'RESOLVIDAS', valor: String(resolvidas), cor: [21, 87, 36] },
             { titulo: 'BACKLOG (PEND.)', valor: String(pendentes), cor: [200, 35, 51] },
             { titulo: 'MTTR MÉDIO', valor: `${metricas.mttr} h`, cor: [180, 130, 0] },
-            { titulo: 'MTBF MÉDIO', valor: `${metricas.mtbf} h`, cor: [17, 122, 139] }
+            { titulo: 'MTBF MÉDIO', valor: `${metricas.mtbf} h`, cor: [17, 122, 139] },
+            {
+                titulo: 'DISPONIBILIDADE',
+                valor: `${metricas.disponibilidade}${metricas.disponibilidade !== '-' ? '%' : ''}`,
+                detalhe: `Tempo operacional: ${metricas.tempoOperacionalHoras.toFixed(1)} h`,
+                cor: [111, 66, 193]
+            }
         ];
 
-        const larguraCard = 48;
-        const alturaCard = 15;
-        const gap = 6;
+        const larguraCard = 42;
+        const alturaCard = 18;
+        const gap = 4;
         const inicioX = (larguraPagina - (cards.length * larguraCard + (cards.length - 1) * gap)) / 2;
 
         cards.forEach((c, idx) => {
@@ -807,18 +815,65 @@ function gerarRelatorioPdfMensal() {
 
             pdf.setFontSize(10.5);
             pdf.setTextColor(c.cor[0], c.cor[1], c.cor[2]);
-            pdf.text(c.valor, x + 6, yTop + 11.5);
+            pdf.text(c.valor, x + 6, yTop + (c.detalhe ? 10.5 : 13));
+            if (c.detalhe) {
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(5.5);
+                pdf.setTextColor(100);
+                pdf.text(c.detalhe, x + 6, yTop + 16);
+            }
         });
         pdf.setTextColor(0);
     }
 
-    // PÁGINA 1: Cabeçalho, Resumo de Indicadores e Gráficos Mensais
+    function desenharResumoDescricaoRecorrente(yTop) {
+        const descricaoRecorrente = getDescricaoMaisRecorrente(registrosRelatorio);
+        const x = 14;
+        const largura = larguraPagina - 28;
+        const altura = 22;
+
+        pdf.setFillColor(248, 249, 250);
+        pdf.roundedRect(x, yTop, largura, altura, 2, 2, 'F');
+        pdf.setDrawColor(220);
+        pdf.roundedRect(x, yTop, largura, altura, 2, 2, 'S');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7);
+        pdf.setTextColor(100);
+        pdf.text('DESCRIÇÃO MAIS RECORRENTE', x + 4, yTop + 5);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(35);
+        if (descricaoRecorrente) {
+            const larguraTexto = largura - 8;
+            const linhasDescricao = pdf.splitTextToSize(descricaoRecorrente.descricao, larguraTexto);
+            const linhasExibidas = linhasDescricao.slice(0, 2);
+            if (linhasDescricao.length > linhasExibidas.length) {
+                linhasExibidas[linhasExibidas.length - 1] =
+                    `${linhasExibidas[linhasExibidas.length - 1].slice(0, -3)}...`;
+            }
+            pdf.text(linhasExibidas, x + 4, yTop + 10);
+            pdf.setFontSize(6.5);
+            pdf.setTextColor(100);
+            pdf.text(
+                `${descricaoRecorrente.equipamento} · ${descricaoRecorrente.quantidade} ocorrência(s)`,
+                x + 4,
+                yTop + 19
+            );
+        } else {
+            pdf.text('Sem descrições disponíveis para os registros selecionados.', x + 4, yTop + 12);
+        }
+        pdf.setTextColor(0);
+    }
+
+    // PÁGINA 1: Cabeçalho, indicadores, descrição recorrente e gráficos mensais
     desenharCabecalho(tituloRelatorio, 'Indicadores Gerais de Desempenho e Distribuição Mensal');
     desenharResumoIndicadores(53);
+    desenharResumoDescricaoRecorrente(74);
 
     const margemEsquerda = 28;
     const margemDireita = 20;
-    const topoGrafico = 76;
+    const topoGrafico = 107;
     const baseGrafico = alturaPagina - 25;
     const alturaGrafico = baseGrafico - topoGrafico;
     const larguraGrafico = larguraPagina - margemEsquerda - margemDireita;
@@ -832,14 +887,14 @@ function gerarRelatorioPdfMensal() {
     // Legenda do gráfico
     pdf.setFontSize(8.5);
     pdf.setFillColor(0, 64, 133);
-    pdf.rect(margemEsquerda, 70, 4, 4, 'F');
-    pdf.text('Total', margemEsquerda + 6, 73.5);
+    pdf.rect(margemEsquerda, 101, 4, 4, 'F');
+    pdf.text('Total', margemEsquerda + 6, 104.5);
     pdf.setFillColor(21, 87, 36);
-    pdf.rect(margemEsquerda + 28, 70, 4, 4, 'F');
-    pdf.text('Resolvidas', margemEsquerda + 34, 73.5);
+    pdf.rect(margemEsquerda + 28, 101, 4, 4, 'F');
+    pdf.text('Resolvidas', margemEsquerda + 34, 104.5);
     pdf.setFillColor(220, 53, 69);
-    pdf.rect(margemEsquerda + 68, 70, 4, 4, 'F');
-    pdf.text('Pendentes', margemEsquerda + 74, 73.5);
+    pdf.rect(margemEsquerda + 68, 101, 4, 4, 'F');
+    pdf.text('Pendentes', margemEsquerda + 74, 104.5);
 
     // Linhas de grade
     for (let linha = 0; linha <= 5; linha++) {
@@ -977,8 +1032,8 @@ function gerarRelatorioPdfMensal() {
         }
     });
 
-    const nomeArquivo = equipSelecionado 
-        ? `relatorio-osmc-${equipSelecionado.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+    const nomeArquivo = tagSelecionada
+        ? `relatorio-osmc-${tagSelecionada.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
         : (somentePendencias ? 'relatorio-osmc-pendencias.pdf' : 'relatorio-osmc-completo.pdf');
 
     pdf.save(nomeArquivo);
