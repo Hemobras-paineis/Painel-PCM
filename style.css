@@ -440,6 +440,25 @@ tbody tr:hover {
     color: var(--text-color);
 }
 
+.kpi-card-detail {
+    display: inline-block;
+    margin-top: 5px;
+    color: #666;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+}
+
+.kpi-card-description {
+    flex: 2 1 300px;
+}
+
+.kpi-card-description p {
+    font-size: 15px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
 .chart-container {
     width: 250px;
     height: 100px;

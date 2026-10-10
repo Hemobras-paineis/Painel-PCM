@@ -285,6 +285,10 @@ function fetchData(isSilentUpdate = false) {
             });
 
             const statusIdx = colIndices[0];
+            const tagIdx = headerRow.findIndex(h => h && (
+                /\btag\b/i.test(h) ||
+                /identifica[cç][aã]o do equipamento/i.test(h)
+            ));
             let empresaResponsavelIdx = headerRow.findIndex(h => h &&
                 h.trim().toLowerCase().includes('empresa responsável'));
             if (empresaResponsavelIdx === -1) {
@@ -315,6 +319,8 @@ function fetchData(isSilentUpdate = false) {
                     newRow[14] = "-";
                     newRow.empresaResponsavel = empresaResponsavelIdx !== -1 && row[empresaResponsavelIdx] ?
                         row[empresaResponsavelIdx].toString().trim() : "-";
+                    newRow.tag = tagIdx !== -1 && row[tagIdx] ?
+                        row[tagIdx].toString().trim() : "-";
                     allData.push(newRow);
                 }
             }
@@ -411,11 +417,11 @@ function aplicarFiltrosGerais() {
         const passouPlanta = !plantaFiltro || row[12] === plantaFiltro; 
         const passouBloco = !blocoFiltro || row[4] === blocoFiltro;
 
-        const osmcVal = row[2] ? row[2].toString().toLowerCase() : '';
+        const tagVal = row.tag && row.tag !== '-' ? row.tag.toString().toLowerCase() : '';
         const equipamentoVal = row[6] ? row[6].toString().toLowerCase() : '';
         const salaVal = row[7] ? row[7].toString().toLowerCase() : '';
         const passouBusca = !buscaFiltro ||
-            osmcVal.includes(buscaFiltro) ||
+            tagVal.includes(buscaFiltro) ||
             equipamentoVal.includes(buscaFiltro) || 
             salaVal.includes(buscaFiltro);
 
@@ -595,7 +601,54 @@ function calcularMetricasGerais(dados) {
         mtbf = (tempoOperacionalHoras / totalFalhas).toFixed(1);
     }
 
-    return { mttr, mtbf, tempoReparacaoTotalHoras, ordensFechadasComData };
+    const mttrHoras = Number(mttr);
+    const mtbfHoras = Number(mtbf);
+    const disponibilidade = mtbfHoras + mttrHoras > 0
+        ? (mtbfHoras / (mtbfHoras + mttrHoras) * 100).toFixed(1)
+        : '-';
+
+    return {
+        mttr,
+        mtbf,
+        disponibilidade,
+        tempoOperacionalHoras: totalFalhas > 0 && menorDataEmissao && maiorData && maiorData > menorDataEmissao
+            ? Math.max(0, (maiorData - menorDataEmissao) / (1000 * 60 * 60) - tempoReparacaoTotalHoras)
+            : 0,
+        tempoReparacaoTotalHoras,
+        ordensFechadasComData
+    };
+}
+
+function getDescricaoMaisRecorrente(dados) {
+    const descricoes = new Map();
+
+    dados.forEach(row => {
+        const descricao = row[8] && row[8] !== '-' ? row[8].toString().trim() : '';
+        const equipamento = row[6] && row[6] !== '-' ? row[6].toString().trim() : 'Equipamento não identificado';
+        if (!descricao) return;
+
+        const chaveDescricao = descricao.toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ');
+        const chave = `${equipamento.toLocaleLowerCase('pt-BR')}|${chaveDescricao}`;
+        const recorrencia = descricoes.get(chave);
+        if (recorrencia) {
+            recorrencia.quantidade++;
+        } else {
+            descricoes.set(chave, { descricao, equipamento, quantidade: 1 });
+        }
+    });
+
+    return Array.from(descricoes.values())
+        .sort((a, b) => b.quantidade - a.quantidade || a.descricao.localeCompare(b.descricao, 'pt-BR'))[0] || null;
+}
+
+function escapeHtml(valor) {
+    return valor.replace(/[&<>"']/g, caractere => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[caractere]);
 }
 
 function obterEstiloStatus(status) {
@@ -946,8 +999,12 @@ function atualizarDashboards() {
         }
     });
 
-    const { mttr, mtbf } = calcularMetricasGerais(filteredData);
+    const { mttr, mtbf, disponibilidade, tempoOperacionalHoras } = calcularMetricasGerais(filteredData);
     const backlog = pendentes;
+    const descricaoRecorrente = getDescricaoMaisRecorrente(filteredData);
+    const resumoDescricaoRecorrente = descricaoRecorrente
+        ? `${escapeHtml(descricaoRecorrente.descricao)}<br><span class="kpi-card-detail">${escapeHtml(descricaoRecorrente.equipamento)} · ${descricaoRecorrente.quantidade} ocorrência(s)</span>`
+        : 'Sem descrições disponíveis';
 
     kpiCardsContainer.innerHTML = `
         <div class="kpi-card" style="border-left-color: var(--primary-color);">
@@ -969,6 +1026,15 @@ function atualizarDashboards() {
         <div class="kpi-card" style="border-left-color: #17a2b8;">
             <h3>MTBF Médio</h3>
             <p style="color: #117a8b">${mtbf} <span style="font-size: 13px; font-weight: normal; color: #666;">h</span></p>
+        </div>
+        <div class="kpi-card" style="border-left-color: #6f42c1;">
+            <h3>Tempo de Disponibilidade</h3>
+            <p style="color: #6f42c1">${tempoOperacionalHoras.toFixed(1)} <span style="font-size: 13px; font-weight: normal; color: #666;">h</span></p>
+            <span class="kpi-card-detail">Disponibilidade estimada: ${disponibilidade}${disponibilidade !== '-' ? '%' : ''} · MTBF ÷ (MTBF + MTTR)</span>
+        </div>
+        <div class="kpi-card kpi-card-description" style="border-left-color: #fd7e14;">
+            <h3>Descrição Mais Recorrente</h3>
+            <p>${resumoDescricaoRecorrente}</p>
         </div>
     `;
 
