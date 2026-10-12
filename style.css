@@ -233,8 +233,9 @@ body {
     font-size: 13px;
 }
 
-.report-tag-select {
-    max-width: 220px;
+.report-equipamento-input {
+    width: 260px;
+    max-width: 100%;
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
@@ -571,7 +572,8 @@ tbody tr:hover {
         gap: 8px;
     }
 
-    .report-tag-select {
+    .report-equipamento-input {
+        width: 100%;
         max-width: 100%;
     }
 

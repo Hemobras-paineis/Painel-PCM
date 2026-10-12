@@ -24,7 +24,8 @@ const filterBloco = document.getElementById('filterBloco');
 const btnRefresh = document.getElementById('btnRefresh');
 const btnPdfReport = document.getElementById('btnPdfReport');
 const reportType = document.getElementById('reportType');
-const reportTag = document.getElementById('reportTag');
+const reportEquipamento = document.getElementById('reportEquipamento');
+const reportEquipamentoOptions = document.getElementById('reportEquipamentoOptions');
 
 const loadingState = document.getElementById('loadingState');
 const dashboardSummary = document.getElementById('dashboardSummary'); 
@@ -349,7 +350,7 @@ function popularFiltrosDinamicos() {
     const anosEmissao = new Set();
     const plantaSet = new Set(); 
     const blocoSet = new Set();
-    const tagSet = new Set();
+    const equipamentoSet = new Set();
 
     allData.forEach(row => {
         let cleanStatus = row[0] !== "-" ? row[0].replace(/⚠️|✅|⏸️|❌|⚙️|🛑/g, '').trim() : "-";
@@ -363,9 +364,7 @@ function popularFiltrosDinamicos() {
         }
         if (row[4] !== "-") blocoSet.add(row[4]);
         if (row[12] && row[12] !== "-") plantaSet.add(row[12]);
-        if (row.tag && row.tag !== "-" && !['n/a', '#error!'].includes(row.tag.toLowerCase())) {
-            tagSet.add(row.tag);
-        }
+        if (row[6] && row[6] !== "-") equipamentoSet.add(row[6]);
     });
 
     function preencherSelect(selectElement, valoresSet, ordenar = true) {
@@ -394,7 +393,12 @@ function popularFiltrosDinamicos() {
         .map(mes => ({ value: mes.chave, label: formatarMesEmissao(mes) })));
     preencherSelect(filterPlanta, plantaSet); 
     preencherSelect(filterBloco, blocoSet);
-    preencherSelect(reportTag, tagSet);
+    reportEquipamentoOptions.replaceChildren();
+    Array.from(equipamentoSet).sort().forEach(equipamento => {
+        const option = document.createElement('option');
+        option.value = equipamento;
+        reportEquipamentoOptions.appendChild(option);
+    });
 }
 
 function aplicarFiltrosGerais() {
@@ -711,15 +715,16 @@ function gerarRelatorioPdfMensal() {
     }
 
     const somentePendencias = reportType.value === 'pendencias';
-    const tagSelecionada = (reportTag.value || '').trim();
+    const equipamentoSelecionado = reportEquipamento.value.trim();
 
-    // Filtra pelo tipo de relatório e pela TAG selecionada
+    // Filtra pelo tipo de relatório e pelo equipamento informado
     let registrosRelatorio = filteredData.filter(row => {
         const status = row[0] ? row[0].toString().replace(/⚠️|✅|⏸️|❌|⚙️|🛑/g, '').trim() : '';
         const passouStatus = !somentePendencias || !isStatusResolvido(status);
-        const tagRow = row.tag ? row.tag.toString().trim() : '';
-        const passouTag = !tagSelecionada || tagRow.toLowerCase() === tagSelecionada.toLowerCase();
-        return passouStatus && passouTag;
+        const equipamentoRow = row[6] ? row[6].toString().trim() : '';
+        const passouEquipamento = !equipamentoSelecionado ||
+            equipamentoRow.toLowerCase().includes(equipamentoSelecionado.toLowerCase());
+        return passouStatus && passouEquipamento;
     });
 
     const meses = getStatusPorMes(registrosRelatorio);
@@ -749,8 +754,8 @@ function gerarRelatorioPdfMensal() {
         ? 'Relatório de Pendências de Manutenção Corretiva'
         : 'Relatório Completo de Manutenção Corretiva';
     
-    if (tagSelecionada) {
-        tituloRelatorio += ` - TAG: ${tagSelecionada}`;
+    if (equipamentoSelecionado) {
+        tituloRelatorio += ` - Equipamento: ${equipamentoSelecionado}`;
     }
 
     function desenharCabecalho(titulo, subtitulo) {
@@ -774,7 +779,7 @@ function gerarRelatorioPdfMensal() {
         pdf.setFontSize(8.5);
         pdf.setTextColor(80);
         pdf.text(subtitulo, 24, 43);
-        pdf.text(`Empresa responsável: ${empresaResponsavel} | TAG: ${tagSelecionada || 'Todas'}`, 24, 48);
+        pdf.text(`Empresa responsável: ${empresaResponsavel} | Equipamento: ${equipamentoSelecionado || 'Todos'}`, 24, 48);
         pdf.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')}`, larguraPagina - 16, 28, { align: 'right' });
         pdf.setTextColor(0);
     }
@@ -1032,8 +1037,8 @@ function gerarRelatorioPdfMensal() {
         }
     });
 
-    const nomeArquivo = tagSelecionada
-        ? `relatorio-osmc-${tagSelecionada.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+    const nomeArquivo = equipamentoSelecionado
+        ? `relatorio-osmc-${equipamentoSelecionado.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
         : (somentePendencias ? 'relatorio-osmc-pendencias.pdf' : 'relatorio-osmc-completo.pdf');
 
     pdf.save(nomeArquivo);

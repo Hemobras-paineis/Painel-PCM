@@ -81,10 +81,10 @@
                     <option value="pendencias">Somente pendências</option>
                 </select>
 
-                <label for="reportTag">TAG:</label>
-                <select id="reportTag" class="report-type-select report-tag-select">
-                    <option value="">Todas as TAGs</option>
-                </select>
+                <label for="reportEquipamento">Equipamento:</label>
+                <input type="text" id="reportEquipamento" class="report-type-select report-equipamento-input"
+                    list="reportEquipamentoOptions" placeholder="Todos os Equipamentos" autocomplete="off">
+                <datalist id="reportEquipamentoOptions"></datalist>
 
                 <button id="btnPdfReport" class="btn-pdf-report">Gerar Relatório PDF</button>
             </div>
