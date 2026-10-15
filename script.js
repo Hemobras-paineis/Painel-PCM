@@ -19,6 +19,7 @@ let isTableVisible = false;
 
 const filterEquipamentoSala = document.getElementById('filterEquipamentoSala');
 const filterAnoEmissao = document.getElementById('filterAnoEmissao');
+const filterTipoPeriodo = document.getElementById('filterTipoPeriodo');
 const filterPlanta = document.getElementById('filterPlanta'); 
 const filterBloco = document.getElementById('filterBloco');
 const btnRefresh = document.getElementById('btnRefresh');
@@ -154,7 +155,7 @@ class MultiSelectDropdown {
 
 const filterStatusDropdown = new MultiSelectDropdown('filterStatus', 'Todos os Status', () => aplicarFiltrosGerais());
 const filterEmpresaResponsavelDropdown = new MultiSelectDropdown('filterEmpresaResponsavel', 'Todas as Empresas Responsáveis', () => aplicarFiltrosGerais());
-const filterMesEmissaoDropdown = new MultiSelectDropdown('filterMesEmissao', 'Todos os Meses de Emissão', () => aplicarFiltrosGerais());
+const filterMesEmissaoDropdown = new MultiSelectDropdown('filterMesEmissao', 'Todos os períodos', () => aplicarFiltrosGerais());
 
 function init() {
     Chart.register(ChartDataLabels);
@@ -346,7 +347,7 @@ function fetchData(isSilentUpdate = false) {
 function popularFiltrosDinamicos() {
     const statusSet = new Set();
     const empresaResponsavelSet = new Set();
-    const mesesEmissao = new Map();
+    const periodosEmissao = new Map();
     const anosEmissao = new Set();
     const plantaSet = new Set(); 
     const blocoSet = new Set();
@@ -359,9 +360,10 @@ function popularFiltrosDinamicos() {
         if (row.empresaResponsavel !== "-") empresaResponsavelSet.add(row.empresaResponsavel);
         const mesEmissao = getMesEmissao(row[1]);
         if (mesEmissao) {
-            mesesEmissao.set(mesEmissao.chave, mesEmissao);
             anosEmissao.add(String(mesEmissao.ano));
         }
+        const periodoEmissao = getPeriodoEmissao(row[1], filterTipoPeriodo.value);
+        if (periodoEmissao) periodosEmissao.set(periodoEmissao.chave, periodoEmissao);
         if (row[4] !== "-") blocoSet.add(row[4]);
         if (row[12] && row[12] !== "-") plantaSet.add(row[12]);
         if (row[6] && row[6] !== "-") equipamentoSet.add(row[6]);
@@ -387,10 +389,18 @@ function popularFiltrosDinamicos() {
     preencherSelect(filterAnoEmissao, anosEmissao);
     filterStatusDropdown.preencher(Array.from(statusSet).sort().map(valor => ({ value: valor, label: valor })));
     filterEmpresaResponsavelDropdown.preencher(Array.from(empresaResponsavelSet).sort().map(valor => ({ value: valor, label: valor })));
-    filterMesEmissaoDropdown.preencher(Array.from(mesesEmissao.values())
-        .filter(mes => !filterAnoEmissao.value || String(mes.ano) === filterAnoEmissao.value)
+    const descricoesPeriodo = {
+        dia: 'Todos os dias',
+        semana: 'Todas as semanas',
+        mes: 'Todos os meses',
+        trimestre: 'Todos os trimestres',
+        semestre: 'Todos os semestres'
+    };
+    filterMesEmissaoDropdown.textoPadrao = descricoesPeriodo[filterTipoPeriodo.value];
+    filterMesEmissaoDropdown.preencher(Array.from(periodosEmissao.values())
+        .filter(periodo => !filterAnoEmissao.value || String(periodo.ano) === filterAnoEmissao.value)
         .sort((a, b) => a.chave.localeCompare(b.chave))
-        .map(mes => ({ value: mes.chave, label: formatarMesEmissao(mes) })));
+        .map(periodo => ({ value: periodo.chave, label: periodo.label })));
     preencherSelect(filterPlanta, plantaSet); 
     preencherSelect(filterBloco, blocoSet);
     reportEquipamentoOptions.replaceChildren();
@@ -405,7 +415,8 @@ function aplicarFiltrosGerais() {
     const statusFiltro = filterStatusDropdown.getSelecionados();
     const empresaResponsavelFiltro = filterEmpresaResponsavelDropdown.getSelecionados();
     const anoEmissaoFiltro = filterAnoEmissao.value;
-    const mesesEmissaoFiltro = filterMesEmissaoDropdown.getSelecionados();
+    const periodosEmissaoFiltro = filterMesEmissaoDropdown.getSelecionados();
+    const tipoPeriodoFiltro = filterTipoPeriodo.value;
     const plantaFiltro = filterPlanta.value; 
     const blocoFiltro = filterBloco.value;
     const buscaFiltro = filterEquipamentoSala.value.trim().toLowerCase();
@@ -418,8 +429,9 @@ function aplicarFiltrosGerais() {
             empresaResponsavelFiltro.has(row.empresaResponsavel);
         const mesEmissao = getMesEmissao(row[1]);
         const passouAnoEmissao = !anoEmissaoFiltro || (mesEmissao && String(mesEmissao.ano) === anoEmissaoFiltro);
-        const passouMesEmissao = mesesEmissaoFiltro.size === 0 ||
-            (mesEmissao && mesesEmissaoFiltro.has(mesEmissao.chave));
+        const periodoEmissao = getPeriodoEmissao(row[1], tipoPeriodoFiltro);
+        const passouPeriodoEmissao = periodosEmissaoFiltro.size === 0 ||
+            (periodoEmissao && periodosEmissaoFiltro.has(periodoEmissao.chave));
         const passouPlanta = !plantaFiltro || row[12] === plantaFiltro; 
         const passouBloco = !blocoFiltro || row[4] === blocoFiltro;
 
@@ -431,7 +443,7 @@ function aplicarFiltrosGerais() {
             equipamentoVal.includes(buscaFiltro) || 
             salaVal.includes(buscaFiltro);
 
-        return passouStatus && passouEmpresaResponsavel && passouAnoEmissao && passouMesEmissao &&
+        return passouStatus && passouEmpresaResponsavel && passouAnoEmissao && passouPeriodoEmissao &&
             passouPlanta && passouBloco && passouBusca;
     });
 
@@ -545,27 +557,65 @@ function formatarMesEmissao({ mes, ano }) {
     return `${mesesAbreviados[mes - 1]}/${String(ano).slice(-2)}`;
 }
 
-function getStatusPorMes(data) {
-    const dadosPorMes = new Map();
+function formatarDataPeriodo(data) {
+    return data.toLocaleDateString('pt-BR');
+}
+
+function getPeriodoEmissao(dataEmissao, tipoPeriodo) {
+    const dataIsoSemHorario = typeof dataEmissao === 'string'
+        ? dataEmissao.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+        : null;
+    const data = dataIsoSemHorario
+        ? new Date(Number(dataIsoSemHorario[1]), Number(dataIsoSemHorario[2]) - 1, Number(dataIsoSemHorario[3]))
+        : parseDataHora(dataEmissao);
+    if (!data) return null;
+
+    const ano = data.getFullYear();
+    if (tipoPeriodo === 'dia') {
+        const chave = `${ano}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+        return { chave, ano, label: formatarDataPeriodo(data) };
+    }
+    if (tipoPeriodo === 'semana') {
+        const inicio = new Date(ano, data.getMonth(), data.getDate());
+        inicio.setDate(inicio.getDate() - ((inicio.getDay() + 6) % 7));
+        const fim = new Date(inicio);
+        fim.setDate(fim.getDate() + 6);
+        const chave = `semana-${inicio.getFullYear()}-${String(inicio.getMonth() + 1).padStart(2, '0')}-${String(inicio.getDate()).padStart(2, '0')}`;
+        return { chave, ano, label: `Semana ${formatarDataPeriodo(inicio)} a ${formatarDataPeriodo(fim)}` };
+    }
+    if (tipoPeriodo === 'mes') {
+        const mes = getMesEmissao(dataEmissao);
+        return mes ? { chave: mes.chave, ano: mes.ano, label: formatarMesEmissao(mes) } : null;
+    }
+    if (tipoPeriodo === 'trimestre') {
+        const trimestre = Math.floor(data.getMonth() / 3) + 1;
+        return { chave: `${ano}-T${trimestre}`, ano, label: `${trimestre}º trimestre/${ano}` };
+    }
+    const semestre = data.getMonth() < 6 ? 1 : 2;
+    return { chave: `${ano}-S${semestre}`, ano, label: `${semestre}º semestre/${ano}` };
+}
+
+function getStatusPorPeriodo(data, tipoPeriodo) {
+    const dadosPorPeriodo = new Map();
 
     data.forEach(row => {
-        const mesEmissao = getMesEmissao(row[1]);
-        if (!mesEmissao) return;
+        const periodo = getPeriodoEmissao(row[1], tipoPeriodo);
+        if (!periodo) return;
 
-        if (!dadosPorMes.has(mesEmissao.chave)) {
-            dadosPorMes.set(mesEmissao.chave, { ...mesEmissao, pendentes: 0, resolvidas: 0 });
+        if (!dadosPorPeriodo.has(periodo.chave)) {
+            dadosPorPeriodo.set(periodo.chave, { ...periodo, pendentes: 0, resolvidas: 0 });
         }
 
         const status = row[0] ? row[0].toString().replace(/⚠️|✅|⏸️|❌|⚙️|🛑/g, '').trim() : '';
-        const dadosMes = dadosPorMes.get(mesEmissao.chave);
+        const dadosPeriodo = dadosPorPeriodo.get(periodo.chave);
         if (isStatusResolvido(status)) {
-            dadosMes.resolvidas++;
+            dadosPeriodo.resolvidas++;
         } else {
-            dadosMes.pendentes++;
+            dadosPeriodo.pendentes++;
         }
     });
 
-    return Array.from(dadosPorMes.values()).sort((a, b) => a.chave.localeCompare(b.chave));
+    return Array.from(dadosPorPeriodo.values()).sort((a, b) => a.chave.localeCompare(b.chave));
 }
 
 function calcularMetricasGerais(dados) {
@@ -727,7 +777,8 @@ function gerarRelatorioPdfMensal() {
         return passouStatus && passouEquipamento;
     });
 
-    const meses = getStatusPorMes(registrosRelatorio);
+    const tipoPeriodoFiltro = filterTipoPeriodo.value;
+    const periodos = getStatusPorPeriodo(registrosRelatorio, tipoPeriodoFiltro);
     if (registrosRelatorio.length === 0) {
         alert('Não há registros para os filtros selecionados.');
         return;
@@ -746,9 +797,40 @@ function gerarRelatorioPdfMensal() {
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const larguraPagina = pdf.internal.pageSize.getWidth();
     const alturaPagina = pdf.internal.pageSize.getHeight();
-    const mesesPorPagina = 6;
+    const periodosPorPagina = 6;
     const empresasSelecionadas = Array.from(filterEmpresaResponsavelDropdown.getSelecionados());
     const empresaResponsavel = empresasSelecionadas.length > 0 ? empresasSelecionadas.join(', ') : 'Todas as empresas responsáveis';
+    const nomesPeriodos = {
+        dia: 'diário',
+        semana: 'semanal',
+        mes: 'mensal',
+        trimestre: 'trimestral',
+        semestre: 'semestral'
+    };
+    const nomesDistribuicao = {
+        dia: 'diária',
+        semana: 'semanal',
+        mes: 'mensal',
+        trimestre: 'trimestral',
+        semestre: 'semestral'
+    };
+    const periodosSelecionados = filterMesEmissaoDropdown.getSelecionados();
+    const periodosDisponiveis = new Map(allData
+        .map(row => getPeriodoEmissao(row[1], tipoPeriodoFiltro))
+        .filter(Boolean)
+        .map(periodo => [periodo.chave, periodo.label]));
+    const descricoesPeriodosSelecionados = Array.from(periodosSelecionados)
+        .map(chave => periodosDisponiveis.get(chave))
+        .filter(Boolean);
+    let descricaoFiltroPeriodo = descricoesPeriodosSelecionados.length
+        ? descricoesPeriodosSelecionados.slice(0, 3).join(', ')
+        : 'Todos os períodos';
+    if (descricoesPeriodosSelecionados.length > 3) {
+        descricaoFiltroPeriodo += ` e mais ${descricoesPeriodosSelecionados.length - 3}`;
+    }
+    if (filterAnoEmissao.value && !periodosSelecionados.size) {
+        descricaoFiltroPeriodo += ` de ${filterAnoEmissao.value}`;
+    }
     
     let tituloRelatorio = somentePendencias
         ? 'Relatório de Pendências de Manutenção Corretiva'
@@ -780,6 +862,7 @@ function gerarRelatorioPdfMensal() {
         pdf.setTextColor(80);
         pdf.text(subtitulo, 24, 43);
         pdf.text(`Empresa responsável: ${empresaResponsavel} | Equipamento: ${equipamentoSelecionado || 'Todos'}`, 24, 48);
+        pdf.text(`Período ${nomesPeriodos[tipoPeriodoFiltro]}: ${descricaoFiltroPeriodo}`, 24, 52);
         pdf.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')}`, larguraPagina - 16, 28, { align: 'right' });
         pdf.setTextColor(0);
     }
@@ -871,35 +954,35 @@ function gerarRelatorioPdfMensal() {
         pdf.setTextColor(0);
     }
 
-    // PÁGINA 1: Cabeçalho, indicadores, descrição recorrente e gráficos mensais
-    desenharCabecalho(tituloRelatorio, 'Indicadores Gerais de Desempenho e Distribuição Mensal');
-    desenharResumoIndicadores(53);
-    desenharResumoDescricaoRecorrente(74);
+    // PÁGINA 1: Cabeçalho, indicadores, descrição recorrente e gráfico por período
+    desenharCabecalho(tituloRelatorio, `Indicadores Gerais de Desempenho e Distribuição ${nomesDistribuicao[tipoPeriodoFiltro]}`);
+    desenharResumoIndicadores(57);
+    desenharResumoDescricaoRecorrente(78);
 
     const margemEsquerda = 28;
     const margemDireita = 20;
-    const topoGrafico = 107;
+    const topoGrafico = 111;
     const baseGrafico = alturaPagina - 25;
     const alturaGrafico = baseGrafico - topoGrafico;
     const larguraGrafico = larguraPagina - margemEsquerda - margemDireita;
 
-    const mesesExibicao = meses.slice(0, mesesPorPagina);
-    const maiorValor = Math.max(...mesesExibicao.flatMap(mes => [mes.pendentes, mes.resolvidas, mes.pendentes + mes.resolvidas]), 1);
-    const larguraGrupo = larguraGrafico / (mesesExibicao.length || 1);
+    const periodosExibicao = periodos.slice(0, periodosPorPagina);
+    const maiorValor = Math.max(...periodosExibicao.flatMap(periodo => [periodo.pendentes, periodo.resolvidas, periodo.pendentes + periodo.resolvidas]), 1);
+    const larguraGrupo = larguraGrafico / (periodosExibicao.length || 1);
     const larguraBarra = Math.min(16, larguraGrupo * 0.22);
     const espacamentoBarra = larguraBarra + 2;
 
     // Legenda do gráfico
     pdf.setFontSize(8.5);
     pdf.setFillColor(0, 64, 133);
-    pdf.rect(margemEsquerda, 101, 4, 4, 'F');
-    pdf.text('Total', margemEsquerda + 6, 104.5);
+    pdf.rect(margemEsquerda, 105, 4, 4, 'F');
+    pdf.text('Total', margemEsquerda + 6, 108.5);
     pdf.setFillColor(21, 87, 36);
-    pdf.rect(margemEsquerda + 28, 101, 4, 4, 'F');
-    pdf.text('Resolvidas', margemEsquerda + 34, 104.5);
+    pdf.rect(margemEsquerda + 28, 105, 4, 4, 'F');
+    pdf.text('Resolvidas', margemEsquerda + 34, 108.5);
     pdf.setFillColor(220, 53, 69);
-    pdf.rect(margemEsquerda + 68, 101, 4, 4, 'F');
-    pdf.text('Pendentes', margemEsquerda + 74, 104.5);
+    pdf.rect(margemEsquerda + 68, 105, 4, 4, 'F');
+    pdf.text('Pendentes', margemEsquerda + 74, 108.5);
 
     // Linhas de grade
     for (let linha = 0; linha <= 5; linha++) {
@@ -917,12 +1000,12 @@ function gerarRelatorioPdfMensal() {
     pdf.line(margemEsquerda, topoGrafico, margemEsquerda, baseGrafico);
     pdf.line(margemEsquerda, baseGrafico, larguraPagina - margemDireita, baseGrafico);
 
-    mesesExibicao.forEach((mes, indice) => {
-        const total = mes.pendentes + mes.resolvidas;
+    periodosExibicao.forEach((periodo, indice) => {
+        const total = periodo.pendentes + periodo.resolvidas;
         const centroGrupo = margemEsquerda + (larguraGrupo * indice) + (larguraGrupo / 2);
         const alturaTotal = (total / maiorValor) * alturaGrafico;
-        const alturaResolvida = (mes.resolvidas / maiorValor) * alturaGrafico;
-        const alturaPendente = (mes.pendentes / maiorValor) * alturaGrafico;
+        const alturaResolvida = (periodo.resolvidas / maiorValor) * alturaGrafico;
+        const alturaPendente = (periodo.pendentes / maiorValor) * alturaGrafico;
         const xTotal = centroGrupo - espacamentoBarra * 1.5;
         const xResolvida = centroGrupo - larguraBarra / 2;
         const xPendente = centroGrupo + espacamentoBarra * 1.5 - larguraBarra;
@@ -938,14 +1021,14 @@ function gerarRelatorioPdfMensal() {
         pdf.setTextColor(0, 64, 133);
         pdf.text(String(total), xTotal + larguraBarra / 2, baseGrafico - alturaTotal - 2, { align: 'center' });
         pdf.setTextColor(21, 87, 36);
-        pdf.text(String(mes.resolvidas), xResolvida + larguraBarra / 2, baseGrafico - alturaResolvida - 2, { align: 'center' });
+        pdf.text(String(periodo.resolvidas), xResolvida + larguraBarra / 2, baseGrafico - alturaResolvida - 2, { align: 'center' });
         pdf.setTextColor(220, 53, 69);
-        pdf.text(String(mes.pendentes), xPendente + larguraBarra / 2, baseGrafico - alturaPendente - 2, { align: 'center' });
+        pdf.text(String(periodo.pendentes), xPendente + larguraBarra / 2, baseGrafico - alturaPendente - 2, { align: 'center' });
         pdf.setTextColor(0);
 
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(8);
-        pdf.text(formatarMesEmissao(mes), centroGrupo, baseGrafico + 6, { align: 'center' });
+        pdf.text(periodo.label, centroGrupo, baseGrafico + 6, { align: 'center', maxWidth: larguraGrupo });
         pdf.setFont('helvetica', 'normal');
     });
 
@@ -1100,8 +1183,8 @@ function atualizarDashboards() {
 
     const coresBase = ['#155724', '#004085', '#d39e00', '#6c757d', '#dc3545', '#17a2b8', '#343a40', '#28a745'];
 
-    const statusPorMes = getStatusPorMes(filteredData);
-    const statusLabels = statusPorMes.map(formatarMesEmissao);
+    const statusPorMes = getStatusPorPeriodo(filteredData, 'mes');
+    const statusLabels = statusPorMes.map(periodo => periodo.label);
     const ctxStatus = document.getElementById('osmcChart').getContext('2d');
     
     if (osmcChartInstance) {
@@ -1294,6 +1377,10 @@ filterEquipamentoSala.addEventListener('input', () => {
 });
 
 filterAnoEmissao.addEventListener('change', () => {
+    popularFiltrosDinamicos();
+    aplicarFiltrosGerais();
+});
+filterTipoPeriodo.addEventListener('change', () => {
     popularFiltrosDinamicos();
     aplicarFiltrosGerais();
 });

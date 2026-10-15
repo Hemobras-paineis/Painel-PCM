@@ -35,8 +35,15 @@
                 <select id="filterAnoEmissao" class="filter-select">
                     <option value="">Todos os Anos de Emissão</option>
                 </select>
+                <select id="filterTipoPeriodo" class="filter-select" aria-label="Granularidade do período">
+                    <option value="dia">Diário</option>
+                    <option value="semana">Semanal</option>
+                    <option value="mes" selected>Mensal</option>
+                    <option value="trimestre">Trimestral</option>
+                    <option value="semestre">Semestral</option>
+                </select>
                 <div class="multi-select" id="filterMesEmissaoWrapper">
-                    <button type="button" class="filter-select multi-select-btn" id="filterMesEmissaoBtn">Todos os Meses de Emissão</button>
+                    <button type="button" class="filter-select multi-select-btn" id="filterMesEmissaoBtn">Todos os períodos</button>
                     <div class="multi-select-panel" id="filterMesEmissaoPanel" hidden></div>
                 </div>
                 <select id="filterPlanta" class="filter-select">
