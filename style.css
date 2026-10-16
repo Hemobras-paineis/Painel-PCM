@@ -450,16 +450,6 @@ tbody tr:hover {
     line-height: 1.4;
 }
 
-.kpi-card-description {
-    flex: 2 1 300px;
-}
-
-.kpi-card-description p {
-    font-size: 15px;
-    line-height: 1.4;
-    overflow-wrap: anywhere;
-}
-
 .chart-container {
     width: 250px;
     height: 100px;

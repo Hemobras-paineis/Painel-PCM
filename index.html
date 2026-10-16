@@ -32,6 +32,14 @@
                     <button type="button" class="filter-select multi-select-btn" id="filterEmpresaResponsavelBtn">Todas as Empresas Responsáveis</button>
                     <div class="multi-select-panel" id="filterEmpresaResponsavelPanel" hidden></div>
                 </div>
+                <div class="multi-select" id="filterDisciplinaWrapper">
+                    <button type="button" class="filter-select multi-select-btn" id="filterDisciplinaBtn">Todas as Disciplinas</button>
+                    <div class="multi-select-panel" id="filterDisciplinaPanel" hidden></div>
+                </div>
+                <div class="multi-select" id="filterSistemaWrapper">
+                    <button type="button" class="filter-select multi-select-btn" id="filterSistemaBtn">Todos os Sistemas</button>
+                    <div class="multi-select-panel" id="filterSistemaPanel" hidden></div>
+                </div>
                 <select id="filterAnoEmissao" class="filter-select">
                     <option value="">Todos os Anos de Emissão</option>
                 </select>
@@ -46,9 +54,6 @@
                     <button type="button" class="filter-select multi-select-btn" id="filterMesEmissaoBtn">Todos os períodos</button>
                     <div class="multi-select-panel" id="filterMesEmissaoPanel" hidden></div>
                 </div>
-                <select id="filterPlanta" class="filter-select">
-                    <option value="">Todas as Plantas</option>
-                </select>
                 <select id="filterBloco" class="filter-select">
                     <option value="">Todos os Blocos</option>
                 </select>
@@ -68,16 +73,12 @@
 
             <div class="charts-grid" id="chartsGrid" style="display: none;">
                 <div class="chart-box">
-                    <h4>Total, Resolvidas e Pendentes por Mês</h4>
+                    <h4 id="totalChartTitle">Total, Resolvidas e Pendentes por Mês</h4>
                     <div class="canvas-container"><canvas id="osmcChart"></canvas></div>
                 </div>
                 <div class="chart-box">
-                    <h4 id="blocoChartTitle">Top 5 Blocos (Total de OSMC)</h4>
+                    <h4 id="blocoChartTitle">Top 5 Empresas (% de O.S. Resolvidas)</h4>
                     <div class="canvas-container"><canvas id="blocoChart"></canvas></div>
-                </div>
-                <div class="chart-box">
-                    <h4>Execução Média por Planta (%)</h4>
-                    <div class="canvas-container"><canvas id="plantaChart"></canvas></div>
                 </div>
             </div>
 

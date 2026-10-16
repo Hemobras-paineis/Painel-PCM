@@ -2,8 +2,8 @@ const CSV_URL = "https://docs.google.com/spreadsheets/d/1IGkI1foAYcKUYWSF2jknjaq
 
 const COLUNAS_DESEJADAS = [
     "Status", "Data/hora de Emissão", "Número da OSMC", "Solicitante", "Bloco", "Piso",
-    "Equipamento", "Sala", "Descrição do Problema", "Observação", "Motivo", "Data/hora de fechamento", "Planta",
-    "MTTR (h)", "MTBF (h)"
+    "Equipamento", "Sala", "Descrição do Problema", "Observação", "Motivo", "Data/hora de fechamento",
+    "MTTR (h)", "MTBF (h)", "Empresa Responsável", "Disciplina", "Sistema"
 ];
 
 let allData = [];
@@ -13,14 +13,12 @@ let currentPage = 1;
 
 let osmcChartInstance = null; 
 let blocoChartInstance = null;
-let plantaChartInstance = null; 
 
 let isTableVisible = false;
 
 const filterEquipamentoSala = document.getElementById('filterEquipamentoSala');
 const filterAnoEmissao = document.getElementById('filterAnoEmissao');
 const filterTipoPeriodo = document.getElementById('filterTipoPeriodo');
-const filterPlanta = document.getElementById('filterPlanta'); 
 const filterBloco = document.getElementById('filterBloco');
 const btnRefresh = document.getElementById('btnRefresh');
 const btnPdfReport = document.getElementById('btnPdfReport');
@@ -154,7 +152,16 @@ class MultiSelectDropdown {
 }
 
 const filterStatusDropdown = new MultiSelectDropdown('filterStatus', 'Todos os Status', () => aplicarFiltrosGerais());
-const filterEmpresaResponsavelDropdown = new MultiSelectDropdown('filterEmpresaResponsavel', 'Todas as Empresas Responsáveis', () => aplicarFiltrosGerais());
+const filterEmpresaResponsavelDropdown = new MultiSelectDropdown(
+    'filterEmpresaResponsavel',
+    'Todas as Empresas Responsáveis',
+    () => {
+        atualizarFiltrosRelacionadosEmpresa();
+        aplicarFiltrosGerais();
+    }
+);
+const filterDisciplina = new MultiSelectDropdown('filterDisciplina', 'Todas as Disciplinas', () => aplicarFiltrosGerais());
+const filterSistema = new MultiSelectDropdown('filterSistema', 'Todos os Sistemas', () => aplicarFiltrosGerais());
 const filterMesEmissaoDropdown = new MultiSelectDropdown('filterMesEmissao', 'Todos os períodos', () => aplicarFiltrosGerais());
 
 function init() {
@@ -211,7 +218,7 @@ function calcularMetricasLinhaALinha(dados) {
             const horas = (dataFechamento - dataEmissao) / (1000 * 60 * 60);
             mttrIndividual = horas.toFixed(1);
         }
-        row[13] = mttrIndividual;
+        row[12] = mttrIndividual;
 
         if (equip && dataEmissao) {
             if (!equipamentosMap.has(equip)) {
@@ -223,7 +230,7 @@ function calcularMetricasLinhaALinha(dados) {
                 dataFechamento
             });
         } else {
-            row[14] = '-';
+            row[13] = '-';
         }
     });
 
@@ -232,7 +239,7 @@ function calcularMetricasLinhaALinha(dados) {
 
         ocorrencias.forEach((item, i) => {
             if (i === 0) {
-                dados[item.index][14] = '-';
+                dados[item.index][13] = '-';
             } else {
                 const anterior = ocorrencias[i - 1];
                 const pontoPartida = (anterior.dataFechamento && anterior.dataFechamento <= item.dataEmissao)
@@ -240,7 +247,7 @@ function calcularMetricasLinhaALinha(dados) {
                     : anterior.dataEmissao;
 
                 const diffHoras = (item.dataEmissao - pontoPartida) / (1000 * 60 * 60);
-                dados[item.index][14] = diffHoras >= 0 ? diffHoras.toFixed(1) : '-';
+                dados[item.index][13] = diffHoras >= 0 ? diffHoras.toFixed(1) : '-';
             }
         });
     });
@@ -276,7 +283,7 @@ function fetchData(isSilentUpdate = false) {
             }
 
             const headerRow = rawData[headerIndex];
-            const colunasBase = COLUNAS_DESEJADAS.slice(0, 13);
+            const colunasBase = COLUNAS_DESEJADAS.slice(0, 12);
             let colIndices = colunasBase.map(colName => {
                 let index = headerRow.findIndex(h => h && h.trim().toLowerCase() === colName.toLowerCase());
                 if (index === -1) index = headerRow.findIndex(h => h && h.toLowerCase().includes(colName.toLowerCase()));
@@ -296,6 +303,8 @@ function fetchData(isSilentUpdate = false) {
             if (empresaResponsavelIdx === -1) {
                 empresaResponsavelIdx = headerRow.findIndex(h => h && h.trim().toLowerCase().includes('empresa'));
             }
+            const disciplinaIdx = headerRow.findIndex(h => h && h.trim().toLowerCase().includes('disciplina'));
+            const sistemaIdx = headerRow.findIndex(h => h && h.trim().toLowerCase().includes('sistema'));
             const osmcIdx = colIndices[2];   
             
             allData = [];
@@ -317,10 +326,17 @@ function fetchData(isSilentUpdate = false) {
                     const newRow = colIndices.map(cIdx => {
                         return (cIdx !== -1 && row[cIdx]) ? row[cIdx].toString().trim() : "-";
                     });
+                    newRow[12] = "-";
                     newRow[13] = "-";
-                    newRow[14] = "-";
                     newRow.empresaResponsavel = empresaResponsavelIdx !== -1 && row[empresaResponsavelIdx] ?
                         row[empresaResponsavelIdx].toString().trim() : "-";
+                    newRow.disciplina = disciplinaIdx !== -1 && row[disciplinaIdx] ?
+                        row[disciplinaIdx].toString().trim() : "-";
+                    newRow.sistema = sistemaIdx !== -1 && row[sistemaIdx] ?
+                        row[sistemaIdx].toString().trim() : "-";
+                    newRow[14] = newRow.empresaResponsavel;
+                    newRow[15] = newRow.disciplina;
+                    newRow[16] = newRow.sistema;
                     newRow.tag = tagIdx !== -1 && row[tagIdx] ?
                         row[tagIdx].toString().trim() : "-";
                     allData.push(newRow);
@@ -349,7 +365,6 @@ function popularFiltrosDinamicos() {
     const empresaResponsavelSet = new Set();
     const periodosEmissao = new Map();
     const anosEmissao = new Set();
-    const plantaSet = new Set(); 
     const blocoSet = new Set();
     const equipamentoSet = new Set();
 
@@ -365,7 +380,6 @@ function popularFiltrosDinamicos() {
         const periodoEmissao = getPeriodoEmissao(row[1], filterTipoPeriodo.value);
         if (periodoEmissao) periodosEmissao.set(periodoEmissao.chave, periodoEmissao);
         if (row[4] !== "-") blocoSet.add(row[4]);
-        if (row[12] && row[12] !== "-") plantaSet.add(row[12]);
         if (row[6] && row[6] !== "-") equipamentoSet.add(row[6]);
     });
 
@@ -389,6 +403,7 @@ function popularFiltrosDinamicos() {
     preencherSelect(filterAnoEmissao, anosEmissao);
     filterStatusDropdown.preencher(Array.from(statusSet).sort().map(valor => ({ value: valor, label: valor })));
     filterEmpresaResponsavelDropdown.preencher(Array.from(empresaResponsavelSet).sort().map(valor => ({ value: valor, label: valor })));
+    atualizarFiltrosRelacionadosEmpresa();
     const descricoesPeriodo = {
         dia: 'Todos os dias',
         semana: 'Todas as semanas',
@@ -401,8 +416,6 @@ function popularFiltrosDinamicos() {
         .filter(periodo => !filterAnoEmissao.value || String(periodo.ano) === filterAnoEmissao.value)
         .sort((a, b) => a.chave.localeCompare(b.chave))
         .map(periodo => ({ value: periodo.chave, label: periodo.label })));
-    preencherSelect(filterPlanta, plantaSet); 
-    preencherSelect(filterBloco, blocoSet);
     reportEquipamentoOptions.replaceChildren();
     Array.from(equipamentoSet).sort().forEach(equipamento => {
         const option = document.createElement('option');
@@ -411,13 +424,47 @@ function popularFiltrosDinamicos() {
     });
 }
 
+function atualizarFiltrosRelacionadosEmpresa() {
+    const empresasSelecionadas = filterEmpresaResponsavelDropdown.getSelecionados();
+    const dadosEmpresa = allData.filter(row =>
+        empresasSelecionadas.size === 0 || empresasSelecionadas.has(row.empresaResponsavel)
+    );
+    const disciplinas = new Set();
+    const sistemas = new Set();
+    const blocos = new Set();
+
+    dadosEmpresa.forEach(row => {
+        if (row.disciplina && row.disciplina !== '-') disciplinas.add(row.disciplina);
+        if (row.sistema && row.sistema !== '-') sistemas.add(row.sistema);
+        if (row[4] && row[4] !== '-') blocos.add(row[4]);
+    });
+
+    filterDisciplina.preencher(
+        Array.from(disciplinas).sort().map(valor => ({ value: valor, label: valor }))
+    );
+    filterSistema.preencher(
+        Array.from(sistemas).sort().map(valor => ({ value: valor, label: valor }))
+    );
+
+    const blocoAtual = filterBloco.value;
+    filterBloco.innerHTML = `<option value="">${filterBloco.options[0].text}</option>`;
+    Array.from(blocos).sort().forEach(bloco => {
+        const option = document.createElement('option');
+        option.value = bloco;
+        option.textContent = bloco;
+        option.selected = bloco === blocoAtual;
+        filterBloco.appendChild(option);
+    });
+}
+
 function aplicarFiltrosGerais() {
     const statusFiltro = filterStatusDropdown.getSelecionados();
     const empresaResponsavelFiltro = filterEmpresaResponsavelDropdown.getSelecionados();
+    const disciplinaFiltro = filterDisciplina.getSelecionados();
+    const sistemaFiltro = filterSistema.getSelecionados();
     const anoEmissaoFiltro = filterAnoEmissao.value;
     const periodosEmissaoFiltro = filterMesEmissaoDropdown.getSelecionados();
     const tipoPeriodoFiltro = filterTipoPeriodo.value;
-    const plantaFiltro = filterPlanta.value; 
     const blocoFiltro = filterBloco.value;
     const buscaFiltro = filterEquipamentoSala.value.trim().toLowerCase();
 
@@ -427,12 +474,13 @@ function aplicarFiltrosGerais() {
         const passouStatus = statusFiltro.size === 0 || statusFiltro.has(cleanStatus);
         const passouEmpresaResponsavel = empresaResponsavelFiltro.size === 0 ||
             empresaResponsavelFiltro.has(row.empresaResponsavel);
+        const passouDisciplina = disciplinaFiltro.size === 0 || disciplinaFiltro.has(row.disciplina);
+        const passouSistema = sistemaFiltro.size === 0 || sistemaFiltro.has(row.sistema);
         const mesEmissao = getMesEmissao(row[1]);
         const passouAnoEmissao = !anoEmissaoFiltro || (mesEmissao && String(mesEmissao.ano) === anoEmissaoFiltro);
         const periodoEmissao = getPeriodoEmissao(row[1], tipoPeriodoFiltro);
         const passouPeriodoEmissao = periodosEmissaoFiltro.size === 0 ||
             (periodoEmissao && periodosEmissaoFiltro.has(periodoEmissao.chave));
-        const passouPlanta = !plantaFiltro || row[12] === plantaFiltro; 
         const passouBloco = !blocoFiltro || row[4] === blocoFiltro;
 
         const tagVal = row.tag && row.tag !== '-' ? row.tag.toString().toLowerCase() : '';
@@ -443,8 +491,9 @@ function aplicarFiltrosGerais() {
             equipamentoVal.includes(buscaFiltro) || 
             salaVal.includes(buscaFiltro);
 
-        return passouStatus && passouEmpresaResponsavel && passouAnoEmissao && passouPeriodoEmissao &&
-            passouPlanta && passouBloco && passouBusca;
+        return passouStatus && passouEmpresaResponsavel && passouDisciplina && passouSistema &&
+            passouAnoEmissao && passouPeriodoEmissao &&
+            passouBloco && passouBusca;
     });
 
     currentPage = 1;
@@ -454,73 +503,38 @@ function aplicarFiltrosGerais() {
     atualizarDashboards(); 
 }
 
-function getTopNData(dataArray, colIndex, topN) {
-    const counts = {};
+function getPercentualStatusPorGrupo(dataArray, obterGrupo, topN = Infinity) {
+    const dadosPorGrupo = new Map();
+
     dataArray.forEach(row => {
-        let val = row[colIndex] ? row[colIndex].toString().trim() : '';
-        if (val && val !== '-' && val.toLowerCase() !== 'n/a') {
-            counts[val] = (counts[val] || 0) + 1;
+        const grupo = obterGrupo(row);
+        if (!grupo || grupo === '-' || grupo.toLowerCase() === 'n/a') return;
+
+        if (!dadosPorGrupo.has(grupo)) {
+            dadosPorGrupo.set(grupo, { total: 0, resolvidas: 0, pendentes: 0 });
         }
+
+        const dadosGrupo = dadosPorGrupo.get(grupo);
+        const status = row[0] ? row[0].toString().replace(/⚠️|✅|⏸️|❌|⚙️|🛑/g, '').trim() : '';
+        dadosGrupo.total++;
+        if (isStatusResolvido(status)) dadosGrupo.resolvidas++;
+        else dadosGrupo.pendentes++;
     });
 
-    const sorted = Object.keys(counts)
-        .map(key => ({ label: key, count: counts[key] }))
-        .sort((a, b) => b.count - a.count)
+    const grupos = Array.from(dadosPorGrupo.entries())
+        .map(([label, dados]) => ({
+            label,
+            ...dados,
+            percentualResolvidas: Math.round((dados.resolvidas / dados.total) * 1000) / 10,
+            percentualPendentes: Math.round((dados.pendentes / dados.total) * 1000) / 10
+        }))
+        .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, 'pt-BR'))
         .slice(0, topN);
 
     return {
-        labels: sorted.map(item => item.label),
-        data: sorted.map(item => item.count)
-    };
-}
-
-function getExecucaoMensalStats(dataArray) {
-    const dadosPorMes = new Map();
-
-    dataArray.forEach(row => {
-        const mesEmissao = getMesEmissao(row[1]);
-        if (!mesEmissao) return;
-
-        if (!dadosPorMes.has(mesEmissao.chave)) {
-            dadosPorMes.set(mesEmissao.chave, { ...mesEmissao, total: 0, resolvidas: 0 });
-        }
-
-        const dadosMes = dadosPorMes.get(mesEmissao.chave);
-        const status = row[0] ? row[0].toString().replace(/⚠️|✅|⏸️|❌|⚙️|🛑/g, '').trim() : '';
-        dadosMes.total++;
-        if (isStatusResolvido(status)) dadosMes.resolvidas++;
-    });
-
-    const meses = Array.from(dadosPorMes.values()).sort((a, b) => a.chave.localeCompare(b.chave));
-    return {
-        labels: meses.map(formatarMesEmissao),
-        data: meses.map(mes => Math.round((mes.resolvidas / mes.total) * 1000) / 10)
-    };
-}
-
-function getExecucaoPorPlantaStats(dataArray) {
-    const dadosPorPlanta = new Map();
-
-    dataArray.forEach(row => {
-        const planta = row[12] ? row[12].toString().trim() : '';
-        if (!planta || planta === '-' || planta.toLowerCase() === 'n/a') return;
-
-        if (!dadosPorPlanta.has(planta)) {
-            dadosPorPlanta.set(planta, { total: 0, resolvidas: 0 });
-        }
-
-        const dados = dadosPorPlanta.get(planta);
-        const status = row[0] ? row[0].toString().replace(/⚠️|✅|⏸️|❌|⚙️|🛑/g, '').trim() : '';
-        dados.total++;
-        if (isStatusResolvido(status)) dados.resolvidas++;
-    });
-
-    const plantas = Array.from(dadosPorPlanta.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]));
-
-    return {
-        labels: plantas.map(([planta]) => planta),
-        data: plantas.map(([, dados]) => Math.round((dados.resolvidas / dados.total) * 1000) / 10)
+        labels: grupos.map(grupo => grupo.label),
+        resolvidas: grupos.map(grupo => grupo.percentualResolvidas),
+        pendentes: grupos.map(grupo => grupo.percentualPendentes)
     };
 }
 
@@ -667,44 +681,16 @@ function calcularMetricasGerais(dados) {
         mttr,
         mtbf,
         disponibilidade,
+        totalFalhas,
+        periodoTotalHoras: totalFalhas > 0 && menorDataEmissao && maiorData && maiorData > menorDataEmissao
+            ? (maiorData - menorDataEmissao) / (1000 * 60 * 60)
+            : 0,
         tempoOperacionalHoras: totalFalhas > 0 && menorDataEmissao && maiorData && maiorData > menorDataEmissao
             ? Math.max(0, (maiorData - menorDataEmissao) / (1000 * 60 * 60) - tempoReparacaoTotalHoras)
             : 0,
         tempoReparacaoTotalHoras,
         ordensFechadasComData
     };
-}
-
-function getDescricaoMaisRecorrente(dados) {
-    const descricoes = new Map();
-
-    dados.forEach(row => {
-        const descricao = row[8] && row[8] !== '-' ? row[8].toString().trim() : '';
-        const equipamento = row[6] && row[6] !== '-' ? row[6].toString().trim() : 'Equipamento não identificado';
-        if (!descricao) return;
-
-        const chaveDescricao = descricao.toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ');
-        const chave = `${equipamento.toLocaleLowerCase('pt-BR')}|${chaveDescricao}`;
-        const recorrencia = descricoes.get(chave);
-        if (recorrencia) {
-            recorrencia.quantidade++;
-        } else {
-            descricoes.set(chave, { descricao, equipamento, quantidade: 1 });
-        }
-    });
-
-    return Array.from(descricoes.values())
-        .sort((a, b) => b.quantidade - a.quantidade || a.descricao.localeCompare(b.descricao, 'pt-BR'))[0] || null;
-}
-
-function escapeHtml(valor) {
-    return valor.replace(/[&<>"']/g, caractere => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-    })[caractere]);
 }
 
 function obterEstiloStatus(status) {
@@ -798,8 +784,26 @@ function gerarRelatorioPdfMensal() {
     const larguraPagina = pdf.internal.pageSize.getWidth();
     const alturaPagina = pdf.internal.pageSize.getHeight();
     const periodosPorPagina = 6;
-    const empresasSelecionadas = Array.from(filterEmpresaResponsavelDropdown.getSelecionados());
-    const empresaResponsavel = empresasSelecionadas.length > 0 ? empresasSelecionadas.join(', ') : 'Todas as empresas responsáveis';
+    const resumirFiltro = (selecionados, padrao) => {
+        const valores = Array.from(selecionados);
+        if (valores.length === 0) return padrao;
+        return valores.length <= 2 ? valores.join(', ') : `${valores.length} selecionados`;
+    };
+    const resumoEmpresa = resumirFiltro(
+        filterEmpresaResponsavelDropdown.getSelecionados(),
+        'Todas'
+    );
+    const resumoDisciplina = resumirFiltro(filterDisciplina.getSelecionados(), 'Todas');
+    const resumoSistema = resumirFiltro(filterSistema.getSelecionados(), 'Todos');
+    pdf.setFontSize(7);
+    const linhasResumoFiltros = pdf.splitTextToSize(
+        `Empresa: ${resumoEmpresa} | Disciplina: ${resumoDisciplina} | Sistema: ${resumoSistema} | Equipamento: ${equipamentoSelecionado || 'Todos'}`,
+        larguraPagina - 40
+    );
+    if (linhasResumoFiltros.length > 2) {
+        linhasResumoFiltros[1] = `${linhasResumoFiltros[1].slice(0, -3)}...`;
+        linhasResumoFiltros.length = 2;
+    }
     const nomesPeriodos = {
         dia: 'diário',
         semana: 'semanal',
@@ -861,8 +865,9 @@ function gerarRelatorioPdfMensal() {
         pdf.setFontSize(8.5);
         pdf.setTextColor(80);
         pdf.text(subtitulo, 24, 43);
-        pdf.text(`Empresa responsável: ${empresaResponsavel} | Equipamento: ${equipamentoSelecionado || 'Todos'}`, 24, 48);
-        pdf.text(`Período ${nomesPeriodos[tipoPeriodoFiltro]}: ${descricaoFiltroPeriodo}`, 24, 52);
+        pdf.setFontSize(7);
+        pdf.text(linhasResumoFiltros, 24, 48);
+        pdf.text(`Período ${nomesPeriodos[tipoPeriodoFiltro]}: ${descricaoFiltroPeriodo}`, 24, 48 + linhasResumoFiltros.length * 3);
         pdf.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')}`, larguraPagina - 16, 28, { align: 'right' });
         pdf.setTextColor(0);
     }
@@ -872,18 +877,28 @@ function gerarRelatorioPdfMensal() {
             { titulo: 'TOTAL O.S.', valor: String(registrosRelatorio.length), cor: [138, 21, 27] },
             { titulo: 'RESOLVIDAS', valor: String(resolvidas), cor: [21, 87, 36] },
             { titulo: 'BACKLOG (PEND.)', valor: String(pendentes), cor: [200, 35, 51] },
-            { titulo: 'MTTR MÉDIO', valor: `${metricas.mttr} h`, cor: [180, 130, 0] },
-            { titulo: 'MTBF MÉDIO', valor: `${metricas.mtbf} h`, cor: [17, 122, 139] },
+            {
+                titulo: 'MTTR MÉDIO',
+                valor: `${metricas.mttr} h`,
+                detalhe: `${metricas.tempoReparacaoTotalHoras.toFixed(1)} h reparo / ${metricas.ordensFechadasComData} OS`,
+                cor: [180, 130, 0]
+            },
+            {
+                titulo: 'MTBF MÉDIO',
+                valor: `${metricas.mtbf} h`,
+                detalhe: `${metricas.tempoOperacionalHoras.toFixed(1)} h operacionais / ${metricas.totalFalhas} OS`,
+                cor: [17, 122, 139]
+            },
             {
                 titulo: 'DISPONIBILIDADE',
                 valor: `${metricas.disponibilidade}${metricas.disponibilidade !== '-' ? '%' : ''}`,
-                detalhe: `Tempo operacional: ${metricas.tempoOperacionalHoras.toFixed(1)} h`,
+                detalhe: `MTBF ÷ (MTBF + MTTR) | ${metricas.tempoOperacionalHoras.toFixed(1)} h operacionais / ${metricas.tempoReparacaoTotalHoras.toFixed(1)} h em reparo`,
                 cor: [111, 66, 193]
             }
         ];
 
         const larguraCard = 42;
-        const alturaCard = 18;
+        const alturaCard = 23;
         const gap = 4;
         const inicioX = (larguraPagina - (cards.length * larguraCard + (cards.length - 1) * gap)) / 2;
 
@@ -903,65 +918,24 @@ function gerarRelatorioPdfMensal() {
 
             pdf.setFontSize(10.5);
             pdf.setTextColor(c.cor[0], c.cor[1], c.cor[2]);
-            pdf.text(c.valor, x + 6, yTop + (c.detalhe ? 10.5 : 13));
+            pdf.text(c.valor, x + 6, yTop + (c.detalhe ? 11 : 15));
             if (c.detalhe) {
                 pdf.setFont('helvetica', 'normal');
-                pdf.setFontSize(5.5);
+                pdf.setFontSize(5);
                 pdf.setTextColor(100);
-                pdf.text(c.detalhe, x + 6, yTop + 16);
+                pdf.text(pdf.splitTextToSize(c.detalhe, larguraCard - 9), x + 6, yTop + 16);
             }
         });
         pdf.setTextColor(0);
     }
 
-    function desenharResumoDescricaoRecorrente(yTop) {
-        const descricaoRecorrente = getDescricaoMaisRecorrente(registrosRelatorio);
-        const x = 14;
-        const largura = larguraPagina - 28;
-        const altura = 22;
-
-        pdf.setFillColor(248, 249, 250);
-        pdf.roundedRect(x, yTop, largura, altura, 2, 2, 'F');
-        pdf.setDrawColor(220);
-        pdf.roundedRect(x, yTop, largura, altura, 2, 2, 'S');
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(7);
-        pdf.setTextColor(100);
-        pdf.text('DESCRIÇÃO MAIS RECORRENTE', x + 4, yTop + 5);
-
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(7.5);
-        pdf.setTextColor(35);
-        if (descricaoRecorrente) {
-            const larguraTexto = largura - 8;
-            const linhasDescricao = pdf.splitTextToSize(descricaoRecorrente.descricao, larguraTexto);
-            const linhasExibidas = linhasDescricao.slice(0, 2);
-            if (linhasDescricao.length > linhasExibidas.length) {
-                linhasExibidas[linhasExibidas.length - 1] =
-                    `${linhasExibidas[linhasExibidas.length - 1].slice(0, -3)}...`;
-            }
-            pdf.text(linhasExibidas, x + 4, yTop + 10);
-            pdf.setFontSize(6.5);
-            pdf.setTextColor(100);
-            pdf.text(
-                `${descricaoRecorrente.equipamento} · ${descricaoRecorrente.quantidade} ocorrência(s)`,
-                x + 4,
-                yTop + 19
-            );
-        } else {
-            pdf.text('Sem descrições disponíveis para os registros selecionados.', x + 4, yTop + 12);
-        }
-        pdf.setTextColor(0);
-    }
-
-    // PÁGINA 1: Cabeçalho, indicadores, descrição recorrente e gráfico por período
+    // PÁGINA 1: Cabeçalho, indicadores detalhados e gráfico por período
     desenharCabecalho(tituloRelatorio, `Indicadores Gerais de Desempenho e Distribuição ${nomesDistribuicao[tipoPeriodoFiltro]}`);
-    desenharResumoIndicadores(57);
-    desenharResumoDescricaoRecorrente(78);
+    desenharResumoIndicadores(59);
 
     const margemEsquerda = 28;
     const margemDireita = 20;
-    const topoGrafico = 111;
+    const topoGrafico = 96;
     const baseGrafico = alturaPagina - 25;
     const alturaGrafico = baseGrafico - topoGrafico;
     const larguraGrafico = larguraPagina - margemEsquerda - margemDireita;
@@ -975,14 +949,14 @@ function gerarRelatorioPdfMensal() {
     // Legenda do gráfico
     pdf.setFontSize(8.5);
     pdf.setFillColor(0, 64, 133);
-    pdf.rect(margemEsquerda, 105, 4, 4, 'F');
-    pdf.text('Total', margemEsquerda + 6, 108.5);
+    pdf.rect(margemEsquerda, 90, 4, 4, 'F');
+    pdf.text('Total', margemEsquerda + 6, 93.5);
     pdf.setFillColor(21, 87, 36);
-    pdf.rect(margemEsquerda + 28, 105, 4, 4, 'F');
-    pdf.text('Resolvidas', margemEsquerda + 34, 108.5);
+    pdf.rect(margemEsquerda + 28, 90, 4, 4, 'F');
+    pdf.text('Resolvidas', margemEsquerda + 34, 93.5);
     pdf.setFillColor(220, 53, 69);
-    pdf.rect(margemEsquerda + 68, 105, 4, 4, 'F');
-    pdf.text('Pendentes', margemEsquerda + 74, 108.5);
+    pdf.rect(margemEsquerda + 68, 90, 4, 4, 'F');
+    pdf.text('Pendentes', margemEsquerda + 74, 93.5);
 
     // Linhas de grade
     for (let linha = 0; linha <= 5; linha++) {
@@ -1035,18 +1009,21 @@ function gerarRelatorioPdfMensal() {
     // PÁGINA 2 em diante: Lista Detalhada com MTTR e MTBF individuais
     const margemEsquerdaTabela = 14;
     const colunas = [
-        { titulo: 'Nº OSMC', x: 14, largura: 22 },
-        { titulo: 'Emissão', x: 36, largura: 20 },
-        { titulo: 'Status', x: 56, largura: 28 },
-        { titulo: 'Equipamento', x: 84, largura: 30 },
-        { titulo: 'Bloco', x: 114, largura: 14 },
-        { titulo: 'MTTR', x: 128, largura: 16 },
-        { titulo: 'MTBF', x: 144, largura: 16 },
-        { titulo: 'Descrição do problema', x: 160, largura: 60 },
-        { titulo: 'Motivo', x: 220, largura: 65 }
+        { titulo: 'Nº OSMC', x: 14, largura: 20 },
+        { titulo: 'Emissão', x: 34, largura: 18 },
+        { titulo: 'Status', x: 52, largura: 23 },
+        { titulo: 'Equipamento', x: 75, largura: 23 },
+        { titulo: 'Empresa', x: 98, largura: 24 },
+        { titulo: 'Disciplina', x: 122, largura: 21 },
+        { titulo: 'Sistema', x: 143, largura: 21 },
+        { titulo: 'Bloco', x: 164, largura: 12 },
+        { titulo: 'MTTR', x: 176, largura: 13 },
+        { titulo: 'MTBF', x: 189, largura: 13 },
+        { titulo: 'Descrição do problema', x: 202, largura: 44 },
+        { titulo: 'Motivo', x: 246, largura: 39 }
     ];
 
-    const yCabecalhoTabela = 55;
+    const yCabecalhoTabela = 61;
     const alturaLinhaTexto = 3.5;
     const yLimite = alturaPagina - 15;
     let yAtual;
@@ -1076,8 +1053,8 @@ function gerarRelatorioPdfMensal() {
     registrosRelatorio.forEach(row => {
         const descricao = row[8] && row[8] !== '-' ? String(row[8]) : '-';
         const motivo = row[10] && row[10] !== '-' ? String(row[10]) : '-';
-        const linhasDescricao = pdf.splitTextToSize(descricao, colunas[7].largura - 2);
-        const linhasMotivo = pdf.splitTextToSize(motivo, colunas[8].largura - 2);
+        const linhasDescricao = pdf.splitTextToSize(descricao, colunas[10].largura - 2);
+        const linhasMotivo = pdf.splitTextToSize(motivo, colunas[11].largura - 2);
         const maxLinhasPorBloco = 25;
         const totalLinhas = Math.max(linhasDescricao.length, linhasMotivo.length);
 
@@ -1096,7 +1073,7 @@ function gerarRelatorioPdfMensal() {
             pdf.line(margemEsquerdaTabela, yAtual + alturaLinha, larguraPagina - margemEsquerdaTabela, yAtual + alturaLinha);
 
             if (inicioBloco === 0) {
-                // OSMC, Emissão, Status, Equipamento, Bloco, MTTR, MTBF
+                // OSMC, emissão, status, equipamento, empresa, disciplina, sistema, bloco, MTTR e MTBF
                 pdf.text(pdf.splitTextToSize(String(row[2] || '-'), colunas[0].largura - 2)[0], colunas[0].x, yAtual + 5.5);
                 pdf.text(pdf.splitTextToSize(String(row[1] || '-'), colunas[1].largura - 2)[0], colunas[1].x, yAtual + 5.5);
 
@@ -1105,16 +1082,19 @@ function gerarRelatorioPdfMensal() {
                 pdf.text(pdf.splitTextToSize(statusLimpo, colunas[2].largura - 6)[0], colunas[2].x + 4.5, yAtual + 5.5);
 
                 pdf.text(pdf.splitTextToSize(String(row[6] || '-'), colunas[3].largura - 2)[0], colunas[3].x, yAtual + 5.5);
-                pdf.text(pdf.splitTextToSize(String(row[4] || '-'), colunas[4].largura - 2)[0], colunas[4].x, yAtual + 5.5);
+                pdf.text(pdf.splitTextToSize(String(row.empresaResponsavel || '-'), colunas[4].largura - 2)[0], colunas[4].x, yAtual + 5.5);
+                pdf.text(pdf.splitTextToSize(String(row.disciplina || '-'), colunas[5].largura - 2)[0], colunas[5].x, yAtual + 5.5);
+                pdf.text(pdf.splitTextToSize(String(row.sistema || '-'), colunas[6].largura - 2)[0], colunas[6].x, yAtual + 5.5);
+                pdf.text(pdf.splitTextToSize(String(row[4] || '-'), colunas[7].largura - 2)[0], colunas[7].x, yAtual + 5.5);
 
-                const mttrTexto = row[13] !== '-' ? `${row[13]} h` : '-';
-                const mtbfTexto = row[14] !== '-' ? `${row[14]} h` : '-';
-                pdf.text(mttrTexto, colunas[5].x, yAtual + 5.5);
-                pdf.text(mtbfTexto, colunas[6].x, yAtual + 5.5);
+                const mttrTexto = row[12] !== '-' ? `${row[12]} h` : '-';
+                const mtbfTexto = row[13] !== '-' ? `${row[13]} h` : '-';
+                pdf.text(mttrTexto, colunas[8].x, yAtual + 5.5);
+                pdf.text(mtbfTexto, colunas[9].x, yAtual + 5.5);
             }
 
-            pdf.text(descBloco, colunas[7].x, yAtual + 5.5);
-            pdf.text(motBloco, colunas[8].x, yAtual + 5.5);
+            pdf.text(descBloco, colunas[10].x, yAtual + 5.5);
+            pdf.text(motBloco, colunas[11].x, yAtual + 5.5);
             yAtual += alturaLinha;
             indiceLinha++;
         }
@@ -1142,12 +1122,17 @@ function atualizarDashboards() {
         }
     });
 
-    const { mttr, mtbf, disponibilidade, tempoOperacionalHoras } = calcularMetricasGerais(filteredData);
+    const {
+        mttr,
+        mtbf,
+        disponibilidade,
+        tempoOperacionalHoras,
+        tempoReparacaoTotalHoras,
+        periodoTotalHoras,
+        totalFalhas,
+        ordensFechadasComData
+    } = calcularMetricasGerais(filteredData);
     const backlog = pendentes;
-    const descricaoRecorrente = getDescricaoMaisRecorrente(filteredData);
-    const resumoDescricaoRecorrente = descricaoRecorrente
-        ? `${escapeHtml(descricaoRecorrente.descricao)}<br><span class="kpi-card-detail">${escapeHtml(descricaoRecorrente.equipamento)} · ${descricaoRecorrente.quantidade} ocorrência(s)</span>`
-        : 'Sem descrições disponíveis';
 
     kpiCardsContainer.innerHTML = `
         <div class="kpi-card" style="border-left-color: var(--primary-color);">
@@ -1165,23 +1150,28 @@ function atualizarDashboards() {
         <div class="kpi-card" style="border-left-color: #e0a800;">
             <h3>MTTR Médio</h3>
             <p style="color: #b38600">${mttr} <span style="font-size: 13px; font-weight: normal; color: #666;">h</span></p>
+            <span class="kpi-card-detail">Tempo total de reparo ÷ O.S. resolvidas com datas<br>${tempoReparacaoTotalHoras.toFixed(1)} h ÷ ${ordensFechadasComData} O.S.</span>
         </div>
         <div class="kpi-card" style="border-left-color: #17a2b8;">
             <h3>MTBF Médio</h3>
             <p style="color: #117a8b">${mtbf} <span style="font-size: 13px; font-weight: normal; color: #666;">h</span></p>
+            <span class="kpi-card-detail">Tempo operacional ÷ O.S. no filtro<br>${tempoOperacionalHoras.toFixed(1)} h ÷ ${totalFalhas} O.S. · Período: ${periodoTotalHoras.toFixed(1)} h</span>
         </div>
         <div class="kpi-card" style="border-left-color: #6f42c1;">
-            <h3>Tempo de Disponibilidade</h3>
-            <p style="color: #6f42c1">${tempoOperacionalHoras.toFixed(1)} <span style="font-size: 13px; font-weight: normal; color: #666;">h</span></p>
-            <span class="kpi-card-detail">Disponibilidade estimada: ${disponibilidade}${disponibilidade !== '-' ? '%' : ''} · MTBF ÷ (MTBF + MTTR)</span>
-        </div>
-        <div class="kpi-card kpi-card-description" style="border-left-color: #fd7e14;">
-            <h3>Descrição Mais Recorrente</h3>
-            <p>${resumoDescricaoRecorrente}</p>
+            <h3>Disponibilidade</h3>
+            <p style="color: #6f42c1">${disponibilidade}${disponibilidade !== '-' ? '<span style="font-size: 13px; font-weight: normal; color: #666;">%</span>' : ''}</p>
+            <span class="kpi-card-detail">MTBF ÷ (MTBF + MTTR)<br>${tempoOperacionalHoras.toFixed(1)} h operacionais · ${tempoReparacaoTotalHoras.toFixed(1)} h em reparo</span>
         </div>
     `;
 
-    const coresBase = ['#155724', '#004085', '#d39e00', '#6c757d', '#dc3545', '#17a2b8', '#343a40', '#28a745'];
+    const empresasSelecionadas = Array.from(filterEmpresaResponsavelDropdown.getSelecionados());
+    const sufixoEmpresa = empresasSelecionadas.length === 0
+        ? ''
+        : empresasSelecionadas.length <= 2
+            ? ` · ${empresasSelecionadas.join(', ')}`
+            : ` · ${empresasSelecionadas.length} empresas selecionadas`;
+    document.getElementById('totalChartTitle').textContent =
+        `Total, Resolvidas e Pendentes por Mês${sufixoEmpresa}`;
 
     const statusPorMes = getStatusPorPeriodo(filteredData, 'mes');
     const statusLabels = statusPorMes.map(periodo => periodo.label);
@@ -1213,70 +1203,63 @@ function atualizarDashboards() {
         });
     }
 
-    const empresasSelecionadas = filterEmpresaResponsavelDropdown.getSelecionados().size > 0;
-    const blocoStats = empresasSelecionadas
-        ? getExecucaoMensalStats(filteredData)
-        : getTopNData(filteredData, 4, 5);
+    const temEmpresaSelecionada = empresasSelecionadas.length > 0;
+    const statusPorGrupo = temEmpresaSelecionada
+        ? getPercentualStatusPorGrupo(filteredData, row => row[4])
+        : getPercentualStatusPorGrupo(filteredData, row => row.empresaResponsavel, 5);
     const tituloBloco = document.getElementById('blocoChartTitle');
-    tituloBloco.textContent = empresasSelecionadas
-        ? 'Execução Mensal (%) - Empresas Selecionadas'
-        : 'Top 5 Blocos (Total de OSMC)';
-    const rotuloDataset = empresasSelecionadas ? 'Execução mensal (%)' : 'Total de OSMC';
-    const corDataset = empresasSelecionadas ? '#155724' : '#004085';
-    const formatarValorBloco = valor => empresasSelecionadas ? `${valor}%` : valor;
+    tituloBloco.textContent = temEmpresaSelecionada
+        ? `Percentual de Resolvidas e Pendentes por Bloco${sufixoEmpresa}`
+        : 'Top 5 Empresas (% de O.S. Resolvidas)';
+    const datasetsBloco = [
+        {
+            label: 'Resolvidas (%)',
+            data: statusPorGrupo.resolvidas,
+            backgroundColor: '#155724'
+        }
+    ];
+    if (temEmpresaSelecionada) {
+        datasetsBloco.push({
+            label: 'Pendentes (%)',
+            data: statusPorGrupo.pendentes,
+            backgroundColor: '#dc3545'
+        });
+    }
+    const formatarPercentual = valor => `${Number(valor).toFixed(1)}%`;
     const ctxBloco = document.getElementById('blocoChart').getContext('2d');
     
     if (blocoChartInstance) {
-        blocoChartInstance.data.labels = blocoStats.labels;
-        blocoChartInstance.data.datasets[0].data = blocoStats.data;
-        blocoChartInstance.data.datasets[0].label = rotuloDataset;
-        blocoChartInstance.data.datasets[0].backgroundColor = corDataset;
-        blocoChartInstance.options.plugins.datalabels.formatter = formatarValorBloco;
-        blocoChartInstance.options.scales.y.max = empresasSelecionadas ? 100 : undefined;
-        blocoChartInstance.options.scales.y.ticks.callback = formatarValorBloco;
+        blocoChartInstance.data.labels = statusPorGrupo.labels;
+        blocoChartInstance.data.datasets = datasetsBloco;
+        blocoChartInstance.options.indexAxis = 'y';
+        blocoChartInstance.options.plugins.legend.display = temEmpresaSelecionada;
+        blocoChartInstance.options.plugins.datalabels.formatter = formatarPercentual;
+        blocoChartInstance.options.scales.x = {
+            beginAtZero: true,
+            max: 100,
+            ticks: { callback: formatarPercentual }
+        };
+        delete blocoChartInstance.options.scales.y.max;
+        delete blocoChartInstance.options.scales.y.ticks.callback;
         blocoChartInstance.update();
     } else {
         blocoChartInstance = new Chart(ctxBloco, {
             type: 'bar',
-            data: { labels: blocoStats.labels, datasets: [{ label: rotuloDataset, data: blocoStats.data, backgroundColor: corDataset }] },
+            data: { labels: statusPorGrupo.labels, datasets: datasetsBloco },
             options: { 
+                indexAxis: 'y',
                 responsive: true, 
                 maintainAspectRatio: false, 
                 layout: { padding: { top: 25 } }, 
                 plugins: { 
-                    legend: { display: false }, 
-                    datalabels: { color: '#444', anchor: 'end', align: 'end', offset: 4, font: { weight: 'bold', size: 11 }, formatter: formatarValorBloco } 
+                    legend: { display: temEmpresaSelecionada, position: 'top' }, 
+                    datalabels: { color: '#444', anchor: 'end', align: 'end', offset: 4, font: { weight: 'bold', size: 11 }, formatter: formatarPercentual } 
                 }, 
-                scales: { y: { beginAtZero: true, max: empresasSelecionadas ? 100 : undefined, ticks: { callback: formatarValorBloco } } } 
+                scales: { x: { beginAtZero: true, max: 100, ticks: { callback: formatarPercentual } } } 
             }
         });
     }
 
-    const plantaStats = getExecucaoPorPlantaStats(filteredData);
-    const formatarValorPlanta = valor => `${valor}%`;
-    const ctxPlanta = document.getElementById('plantaChart').getContext('2d');
-    
-    if (plantaChartInstance) {
-        plantaChartInstance.data.labels = plantaStats.labels;
-        plantaChartInstance.data.datasets[0].data = plantaStats.data;
-        plantaChartInstance.options.plugins.datalabels.formatter = formatarValorPlanta;
-        plantaChartInstance.update();
-    } else {
-        plantaChartInstance = new Chart(ctxPlanta, {
-            type: 'bar',
-            data: { labels: plantaStats.labels, datasets: [{ label: 'Execução (%)', data: plantaStats.data, backgroundColor: coresBase.slice(1), borderWidth: 1 }] },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                layout: { padding: { top: 25 } },
-                plugins: {
-                    legend: { display: false },
-                    datalabels: { color: '#444444', anchor: 'end', align: 'end', offset: 4, font: { weight: 'bold', size: 11 }, formatter: formatarValorPlanta }
-                },
-                scales: { y: { beginAtZero: true, max: 100, ticks: { callback: formatarValorPlanta } } }
-            }
-        });
-    }
 }
 
 function renderTableHeaders() {
@@ -1319,7 +1302,7 @@ function renderTableBody() {
                 } else {
                     td.innerHTML = `<span style="background-color: #f8f9fa; color: #212529; padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">📋 ${cleanVal}</span>`;
                 }
-            } else if (i === 13 || i === 14) {
+            } else if (i === 12 || i === 13) {
                 if (val !== '-') {
                     td.innerHTML = `<strong>${val}</strong> <span style="font-size: 11px; color: #777;">h</span>`;
                 } else {
@@ -1384,7 +1367,6 @@ filterTipoPeriodo.addEventListener('change', () => {
     popularFiltrosDinamicos();
     aplicarFiltrosGerais();
 });
-filterPlanta.addEventListener('change', aplicarFiltrosGerais); 
 filterBloco.addEventListener('change', aplicarFiltrosGerais);
 btnPdfReport.addEventListener('click', gerarRelatorioPdfMensal);
 
