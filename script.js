@@ -19,7 +19,6 @@ let isTableVisible = false;
 const filterEquipamentoSala = document.getElementById('filterEquipamentoSala');
 const filterAnoEmissao = document.getElementById('filterAnoEmissao');
 const filterTipoPeriodo = document.getElementById('filterTipoPeriodo');
-const filterBloco = document.getElementById('filterBloco');
 const btnRefresh = document.getElementById('btnRefresh');
 const btnPdfReport = document.getElementById('btnPdfReport');
 const reportType = document.getElementById('reportType');
@@ -162,6 +161,7 @@ const filterEmpresaResponsavelDropdown = new MultiSelectDropdown(
 );
 const filterDisciplina = new MultiSelectDropdown('filterDisciplina', 'Todas as Disciplinas', () => aplicarFiltrosGerais());
 const filterSistema = new MultiSelectDropdown('filterSistema', 'Todos os Sistemas', () => aplicarFiltrosGerais());
+const filterBloco = new MultiSelectDropdown('filterBloco', 'Todos os Blocos', () => aplicarFiltrosGerais());
 const filterMesEmissaoDropdown = new MultiSelectDropdown('filterMesEmissao', 'Todos os períodos', () => aplicarFiltrosGerais());
 
 function init() {
@@ -446,15 +446,9 @@ function atualizarFiltrosRelacionadosEmpresa() {
         Array.from(sistemas).sort().map(valor => ({ value: valor, label: valor }))
     );
 
-    const blocoAtual = filterBloco.value;
-    filterBloco.innerHTML = `<option value="">${filterBloco.options[0].text}</option>`;
-    Array.from(blocos).sort().forEach(bloco => {
-        const option = document.createElement('option');
-        option.value = bloco;
-        option.textContent = bloco;
-        option.selected = bloco === blocoAtual;
-        filterBloco.appendChild(option);
-    });
+    filterBloco.preencher(
+        Array.from(blocos).sort().map(valor => ({ value: valor, label: valor }))
+    );
 }
 
 function aplicarFiltrosGerais() {
@@ -465,7 +459,7 @@ function aplicarFiltrosGerais() {
     const anoEmissaoFiltro = filterAnoEmissao.value;
     const periodosEmissaoFiltro = filterMesEmissaoDropdown.getSelecionados();
     const tipoPeriodoFiltro = filterTipoPeriodo.value;
-    const blocoFiltro = filterBloco.value;
+    const blocoFiltro = filterBloco.getSelecionados();
     const buscaFiltro = filterEquipamentoSala.value.trim().toLowerCase();
 
     filteredData = allData.filter(row => {
@@ -481,7 +475,7 @@ function aplicarFiltrosGerais() {
         const periodoEmissao = getPeriodoEmissao(row[1], tipoPeriodoFiltro);
         const passouPeriodoEmissao = periodosEmissaoFiltro.size === 0 ||
             (periodoEmissao && periodosEmissaoFiltro.has(periodoEmissao.chave));
-        const passouBloco = !blocoFiltro || row[4] === blocoFiltro;
+        const passouBloco = blocoFiltro.size === 0 || blocoFiltro.has(row[4]);
 
         const tagVal = row.tag && row.tag !== '-' ? row.tag.toString().toLowerCase() : '';
         const equipamentoVal = row[6] ? row[6].toString().toLowerCase() : '';
@@ -1012,15 +1006,16 @@ function gerarRelatorioPdfMensal() {
         { titulo: 'Nº OSMC', x: 14, largura: 20 },
         { titulo: 'Emissão', x: 34, largura: 18 },
         { titulo: 'Status', x: 52, largura: 23 },
-        { titulo: 'Equipamento', x: 75, largura: 23 },
-        { titulo: 'Empresa', x: 98, largura: 24 },
-        { titulo: 'Disciplina', x: 122, largura: 21 },
-        { titulo: 'Sistema', x: 143, largura: 21 },
-        { titulo: 'Bloco', x: 164, largura: 12 },
-        { titulo: 'MTTR', x: 176, largura: 13 },
-        { titulo: 'MTBF', x: 189, largura: 13 },
-        { titulo: 'Descrição do problema', x: 202, largura: 44 },
-        { titulo: 'Motivo', x: 246, largura: 39 }
+        { titulo: 'Solicitante', x: 75, largura: 22 },
+        { titulo: 'Equipamento', x: 97, largura: 22 },
+        { titulo: 'Empresa', x: 119, largura: 21 },
+        { titulo: 'Disciplina', x: 140, largura: 18 },
+        { titulo: 'Sistema', x: 158, largura: 18 },
+        { titulo: 'Bloco', x: 176, largura: 11 },
+        { titulo: 'MTTR', x: 187, largura: 12 },
+        { titulo: 'MTBF', x: 199, largura: 12 },
+        { titulo: 'Descrição do problema', x: 211, largura: 40 },
+        { titulo: 'Motivo', x: 251, largura: 34 }
     ];
 
     const yCabecalhoTabela = 61;
@@ -1053,8 +1048,8 @@ function gerarRelatorioPdfMensal() {
     registrosRelatorio.forEach(row => {
         const descricao = row[8] && row[8] !== '-' ? String(row[8]) : '-';
         const motivo = row[10] && row[10] !== '-' ? String(row[10]) : '-';
-        const linhasDescricao = pdf.splitTextToSize(descricao, colunas[10].largura - 2);
-        const linhasMotivo = pdf.splitTextToSize(motivo, colunas[11].largura - 2);
+        const linhasDescricao = pdf.splitTextToSize(descricao, colunas[11].largura - 2);
+        const linhasMotivo = pdf.splitTextToSize(motivo, colunas[12].largura - 2);
         const maxLinhasPorBloco = 25;
         const totalLinhas = Math.max(linhasDescricao.length, linhasMotivo.length);
 
@@ -1081,20 +1076,21 @@ function gerarRelatorioPdfMensal() {
                 desenharIconeStatus(pdf, statusLimpo, colunas[2].x, yAtual + 5.5);
                 pdf.text(pdf.splitTextToSize(statusLimpo, colunas[2].largura - 6)[0], colunas[2].x + 4.5, yAtual + 5.5);
 
-                pdf.text(pdf.splitTextToSize(String(row[6] || '-'), colunas[3].largura - 2)[0], colunas[3].x, yAtual + 5.5);
-                pdf.text(pdf.splitTextToSize(String(row.empresaResponsavel || '-'), colunas[4].largura - 2)[0], colunas[4].x, yAtual + 5.5);
-                pdf.text(pdf.splitTextToSize(String(row.disciplina || '-'), colunas[5].largura - 2)[0], colunas[5].x, yAtual + 5.5);
-                pdf.text(pdf.splitTextToSize(String(row.sistema || '-'), colunas[6].largura - 2)[0], colunas[6].x, yAtual + 5.5);
-                pdf.text(pdf.splitTextToSize(String(row[4] || '-'), colunas[7].largura - 2)[0], colunas[7].x, yAtual + 5.5);
+                pdf.text(pdf.splitTextToSize(String(row[3] || '-'), colunas[3].largura - 2)[0], colunas[3].x, yAtual + 5.5);
+                pdf.text(pdf.splitTextToSize(String(row[6] || '-'), colunas[4].largura - 2)[0], colunas[4].x, yAtual + 5.5);
+                pdf.text(pdf.splitTextToSize(String(row.empresaResponsavel || '-'), colunas[5].largura - 2)[0], colunas[5].x, yAtual + 5.5);
+                pdf.text(pdf.splitTextToSize(String(row.disciplina || '-'), colunas[6].largura - 2)[0], colunas[6].x, yAtual + 5.5);
+                pdf.text(pdf.splitTextToSize(String(row.sistema || '-'), colunas[7].largura - 2)[0], colunas[7].x, yAtual + 5.5);
+                pdf.text(pdf.splitTextToSize(String(row[4] || '-'), colunas[8].largura - 2)[0], colunas[8].x, yAtual + 5.5);
 
                 const mttrTexto = row[12] !== '-' ? `${row[12]} h` : '-';
                 const mtbfTexto = row[13] !== '-' ? `${row[13]} h` : '-';
-                pdf.text(mttrTexto, colunas[8].x, yAtual + 5.5);
-                pdf.text(mtbfTexto, colunas[9].x, yAtual + 5.5);
+                pdf.text(mttrTexto, colunas[9].x, yAtual + 5.5);
+                pdf.text(mtbfTexto, colunas[10].x, yAtual + 5.5);
             }
 
-            pdf.text(descBloco, colunas[10].x, yAtual + 5.5);
-            pdf.text(motBloco, colunas[11].x, yAtual + 5.5);
+            pdf.text(descBloco, colunas[11].x, yAtual + 5.5);
+            pdf.text(motBloco, colunas[12].x, yAtual + 5.5);
             yAtual += alturaLinha;
             indiceLinha++;
         }
@@ -1135,9 +1131,9 @@ function atualizarDashboards() {
     const backlog = pendentes;
 
     kpiCardsContainer.innerHTML = `
-        <div class="kpi-card" style="border-left-color: var(--primary-color);">
+        <div class="kpi-card" style="border-left-color: #004085;">
             <h3>Total Filtrado</h3>
-            <p style="color: var(--primary-color)">${filteredData.length}</p>
+            <p style="color: #004085">${filteredData.length}</p>
         </div>
         <div class="kpi-card" style="border-left-color: #155724;">
             <h3>O.S Resolvidas</h3>
@@ -1197,8 +1193,16 @@ function atualizarDashboards() {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { position: 'top' }, datalabels: { color: '#444', anchor: 'end', align: 'end', font: { weight: 'bold', size: 10 } } },
-                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                plugins: {
+                    legend: { position: 'top', labels: { usePointStyle: true, font: { size: 13 } } },
+                    tooltip: { mode: 'index', intersect: false },
+                    datalabels: { color: '#333', anchor: 'end', align: 'end', clamp: true, display: ctx => ctx.dataset.data[ctx.dataIndex] > 0, font: { weight: 'bold', size: 12 } }
+                },
+                layout: { padding: { top: 24 } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 12 } } },
+                    y: { beginAtZero: true, grace: '10%', ticks: { precision: 0, font: { size: 12 } } }
+                }
             }
         });
     }
@@ -1227,6 +1231,8 @@ function atualizarDashboards() {
     }
     const formatarPercentual = valor => `${Number(valor).toFixed(1)}%`;
     const ctxBloco = document.getElementById('blocoChart').getContext('2d');
+    const nBarras = statusPorGrupo.labels.length * (temEmpresaSelecionada ? 2 : 1);
+    document.getElementById('blocoChart').parentElement.style.height = `${Math.max(380, nBarras * 28 + 80)}px`;
     
     if (blocoChartInstance) {
         blocoChartInstance.data.labels = statusPorGrupo.labels;
@@ -1250,12 +1256,12 @@ function atualizarDashboards() {
                 indexAxis: 'y',
                 responsive: true, 
                 maintainAspectRatio: false, 
-                layout: { padding: { top: 25 } }, 
+                layout: { padding: { top: 10, right: 50 } }, 
                 plugins: { 
-                    legend: { display: temEmpresaSelecionada, position: 'top' }, 
-                    datalabels: { color: '#444', anchor: 'end', align: 'end', offset: 4, font: { weight: 'bold', size: 11 }, formatter: formatarPercentual } 
+                    legend: { display: temEmpresaSelecionada, position: 'top', labels: { usePointStyle: true, font: { size: 13 } } }, 
+                    datalabels: { color: '#333', anchor: 'end', align: 'end', offset: 4, clamp: true, font: { weight: 'bold', size: 12 }, formatter: formatarPercentual } 
                 }, 
-                scales: { x: { beginAtZero: true, max: 100, ticks: { callback: formatarPercentual } } } 
+                scales: { x: { beginAtZero: true, max: 100, ticks: { callback: formatarPercentual } }, y: { ticks: { font: { size: 12 } } } } 
             }
         });
     }
@@ -1367,7 +1373,6 @@ filterTipoPeriodo.addEventListener('change', () => {
     popularFiltrosDinamicos();
     aplicarFiltrosGerais();
 });
-filterBloco.addEventListener('change', aplicarFiltrosGerais);
 btnPdfReport.addEventListener('click', gerarRelatorioPdfMensal);
 
 document.addEventListener('DOMContentLoaded', init);
